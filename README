@@ -3,7 +3,7 @@ or directories.
 
 It resembles "diff -c -r -N", but:
 
-  - it is always recursive;
+  - it is recursive by default;
   - it handles 'patchlevel.h' first;
   - it supplies 'Index:' and 'Prereq:' lines;
   - it can use 'manifest' files;

@@ -29,12 +29,12 @@ $Config{'startperl'}
 !GROK!THIS!
 print OUT <<'!NO!SUBS!';
 # makepatch.pl -- generate batch of patches.
-my $RCS_Id = '$Id: makepatch.pl,v 1.91 1998-09-13 12:54:34+02 jv Exp $ ';
+my $RCS_Id = '$Id: makepatch.pl,v 1.92 1998-09-21 19:07:29+02 jv Exp $ ';
 # Author          : Johan Vromans
 # Created On      : Tue Jul  7 20:39:39 1992
 # Last Modified By: Johan Vromans
-# Last Modified On: Sun Sep 13 12:46:57 1998
-# Update Count    : 315
+# Last Modified On: Mon Sep 21 19:06:41 1998
+# Update Count    : 321
 # Status          : Experimental
 #
 # Generate a patch kit from two files or directories.
@@ -73,6 +73,7 @@ my $opt_infocmd;		# info command
 my $opt_exclude_vc = 0;		# exclude VC files
 my @opt_exclude;		# list of excludes (wildcards)
 my @opt_exclude_regex;		# list of excludes (regex)
+my $opt_recurse = 1;		# recurse
 
 my $opt_trace = 0;		# trace messages
 my $opt_verbose = 1;		# verbose info
@@ -288,7 +289,7 @@ sub make_filelist ($;$$) {
     my ($dir, $compare_dir, $disp) = @_;
 
     # Return a list of files, sorted, for this directory.
-    # Recurses.
+    # Recurses if $opt_recurse.
 
     my $DIR = new IO::File;
     my $fname;
@@ -327,6 +328,7 @@ sub make_filelist ($;$$) {
 
 	# Push on the list.
 	if ( -d $fname && ( $opt_follow || ! -l $fname ) ) {
+	    next unless $opt_recurse;
 	    # Recurse.
 	    push (@ret, make_filelist ($fname,
                                        $compare_dir . "$file/",
@@ -605,6 +607,7 @@ sub app_options () {
 	     "prefix=s"			=> \$opt_prefix,
 	     "quiet"			=> \$opt_quiet,
 	     "sort!"			=> \$opt_sort,
+	     "recurse!"			=> \$opt_recurse,
 	     "trace"			=> \$opt_trace,
 	     "verbose|v"		=> \$opt_verbose,
 	    );
@@ -700,6 +703,7 @@ Makepatch options:
    -exclude pat         exclude files according to wildcard pattern
    -exclude-regex pat   exclude files and dirs matching regex pattern
    -exclude-vc          exclude version control files (RCS, CVS, SCCS)
+   -[no]recurse         recurse through directories (default)
 
 Filelist options:
    -[file]list		extract filenames from manifest file
@@ -814,6 +818,11 @@ consists of a list of the files contained in the I<new> directory.
 This option is designed to be used in conjunction with the
 B<-oldmanifest> option.  Note that the I<old> and I<new>
 directories must still be indicated.
+
+=item B<->[B<no>]B<recurse>
+
+B<makepatch> recurses through directories by default. Option
+B<-norecurse> prevents recursion beyond the initial directories.
 
 =item B<-follow>
 

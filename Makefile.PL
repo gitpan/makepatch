@@ -2,8 +2,8 @@
 # Author          : Ulrich Pfeifer
 # Created On      : Mon Feb 17 10:51:47 1997
 # Last Modified By: Johan Vromans
-# Last Modified On: Sun Sep 13 12:55:16 1998
-# Update Count    : 15
+# Last Modified On: Mon Sep 21 19:08:36 1998
+# Update Count    : 16
 # Status          : Released
 
 use ExtUtils::MakeMaker;
@@ -16,7 +16,7 @@ my $wrap = join (';',
 WriteMakefile
   (
    NAME           => 'makepatch',
-   VERSION        => '1.91',
+   VERSION        => '1.92',
    'dist'         => {
                       PREOP    =>"$wrap",
                       COMPRESS =>"gzip",
