@@ -29,12 +29,12 @@ $Config{'startperl'}
 !GROK!THIS!
 print OUT <<'!NO!SUBS!';
 # makepatch.pl -- generate batch of patches.
-my $RCS_Id = '$Id: makepatch.pl,v 1.95 1998-11-01 16:58:05+01 jv Exp jv $ ';
+my $RCS_Id = '$Id: Base.pl,v 1.101 1998-11-07 20:57:39+01 jv Exp $ ';
 # Author          : Johan Vromans
 # Created On      : Tue Jul  7 20:39:39 1992
 # Last Modified By: Johan Vromans
-# Last Modified On: Sun Nov  1 17:11:37 1998
-# Update Count    : 634
+# Last Modified On: Sat Nov  7 20:55:05 1998
+# Update Count    : 690
 # Status          : Experimental
 #
 # Generate a patch kit from two files or directories.
@@ -50,11 +50,12 @@ use File::Spec;
 # $LIBDIR = $ENV{'LIBDIR'} || '/usr/local/lib/sample';
 # unshift (@INC, $LIBDIR);
 # require 'common.pl';
+
 my $my_package = 'Sciurix';
-my ($my_name, $my_version) = $RCS_Id =~ /: (.+).pl,v ([\d.]+)/;
-$my_version = sprintf ("%d.%02d", $1, $2)
-  if $my_version =~ /^(\d+)\.(\d+)$/;
-$my_version .= '*' if length('$Locker: jv $ ') > 12;
+my $my_name    = "makepatch";
+my $my_version = "1.97";
+
+$my_version .= '*' if length('$Locker:  $ ') > 12;
 $my_version .= " (2.0BETA)";
 
 ################ Globals ################
@@ -115,6 +116,7 @@ app_options ();
 ################ The Process ################
 
 my ($old, $new) = @ARGV;
+my $timestamp = "".localtime();
 
 # Add --exclude wildcards to --exclude-regex list.
 if ( @opt_exclude ) {
@@ -161,10 +163,10 @@ if ( $opt_filelist ) {
 }
 
 # Create temp dir and names for temp files.
-my $tmpdir   = File::Spec->catdir($TMPDIR, "mp$$.d");
+my $tmpdir   = File::Spec->catdir ($TMPDIR, "mp$$.d");
 mkdir ($tmpdir, 0777) unless -d $tmpdir;
-my $thepatch = catfile($tmpdir, ".mp$$.p");
-my $tmpfile  = catfile($tmpdir, ".mp$$.t");
+my $thepatch = catfile ($tmpdir, ".mp$$.p");
+my $tmpfile  = catfile ($tmpdir, ".mp$$.t");
 
 # This will bail out if the directory could not be created.
 open (PATCH, ">$thepatch") || die ("$thepatch: $!\n");
@@ -192,19 +194,9 @@ sub trace   (@) { print STDERR (@_) if $opt_trace;   }
 sub doit ($$) {
     my ($old, $new) = @_;
 
-    # Unpack archives. This is Unix specific. Oh well...
-    foreach ( $old, $new ) {
-	$_ = File::Spec->canonpath ($_);
-	if ( /^(.+)\.(tar\.gz|tgz)$/i ) {
-	    $_ = extract ($_, "gzip -d | tar xf -", $1);
-	}
-	elsif ( /^(.+)\.(tar)$/i ) {
-	    $_ = extract ($_, "tar xf -", $1);
-	}
-	elsif ( /^(.+)\.(zip)$/i ) {
-	    $_ = extract ($_, "unzip -", $1);
-	}
-    }
+    # Unpack archives.
+    $old = check_extract ($old, "old");
+    $new = check_extract ($new, "new");
 
     if ( -f $old && -f $new ) {
 	# Two files.
@@ -268,11 +260,6 @@ sub doit ($$) {
 	    @new = make_filelist ($new);
 	}
 
-	#$new = ( $new =~ m|^\./?$| ) ? "" : "$new/";
-	#$old = ( $old =~ m|^\./?$| ) ? "" : "$old/";
-	$new = basename ($new);
-	$old = basename ($old);
-
 	if ( $opt_verbose ) {
 	    my ($oldstr) = $old;# chomp ($oldstr);
 	    my ($newstr) = $new;# chomp ($newstr);
@@ -292,7 +279,7 @@ sub doit ($$) {
 	    if ( ! -f catfile($new, $opt_patchlevel) ) {
 		die (catfile($new, $opt_patchlevel) . ": $!\n");
 	    }
-	    if ( -f "$old$opt_patchlevel" ) {
+	    if ( -f catfile($old,$opt_patchlevel) ) {
 		dodiff ($old, $opt_patchlevel, $new, $opt_patchlevel);
 		push (@checkfiles, [ $opt_patchlevel,
 				     -s catfile($old,$opt_patchlevel) ]);
@@ -300,6 +287,7 @@ sub doit ($$) {
 	    else {
 		$created++;
 		dodiff ($old, "", $new, $opt_patchlevel);
+		$newcomers{$opt_patchlevel} = 0;
 	    }
 	}
 	else {
@@ -441,17 +429,57 @@ sub domanifest ($) {
     @ret;
 }
 
+sub check_extract ($$) {
+    my ($arg, $tag) = @_;
+
+    my @exctrl = ("\.(tar\.gz|tgz)" => "gzip -d | tar xf -",
+		  "\.(tar\.bz2)"    => "bzip2 -d | tar xf -",
+		  "\.(tar)"         => "tar xf -",
+		  "\.(zip)"         => "unzip -",
+		 );
+
+    $arg = File::Spec->canonpath ($arg);
+    my $base = basename ($arg);
+
+    while ( @exctrl > 0 ) {
+	my $pat = shift (@exctrl);
+	my $cmd = shift (@exctrl);
+	if ( $base =~ /^(.+)$pat$/i ) {
+	    my $newkit = extract ($arg, $cmd, $tag);
+	    verbose ("Using $newkit for $arg\n");
+	    return $newkit;
+	}
+    }
+    return $arg;
+}
+
 sub extract ($$$) {
     my ($kit, $cmd, $root) = @_;
-    verbose ("Extracting $kit to $tmpdir...\n");
-    trace ("+ ( cd $tmpdir; $cmd ) < $kit\n");
-    my $ret = system ("( cd $tmpdir; $cmd ) < $kit");
+
+    my $tmp = catfile ($tmpdir, $root);
+    verbose ("Extracting $kit to $tmp...\n");
+
+    # Create a temp directory.
+    mkdir ($tmp, 0777) || die ("Cannot mkdir $tmp [$!]\n");
+
+    # Extract the kit.
+    $cmd = "( cd $tmp; $cmd ) < $kit";
+    trace ("+ $cmd\n");
+    my $ret = system ($cmd);
     exit (1) if $ret || ($? & 127);
-    $kit = catfile ($tmpdir, $root);
-    unless ( -d $kit ) {
-	die ("Extracting $kit did not produce a directory $root as expected.\n");
+
+    # Inspect the directory.
+    my $dir = new IO::File;
+    opendir ($dir, $tmp) || die ("Cannot read $tmp [$!]\n");
+    my @files = grep ($_ !~ /^\.+$/, readdir ($dir));
+    closedir ($dir);
+
+    # If we have only one directory, assume it is the root.
+    if ( @files == 1 && -d catfile($tmp,$files[0]) ) {
+	return catfile($tmp,$files[0]);
     }
-    return $kit;
+    # Else, take the temp dir as root.
+    return $tmp;
 }
 
 sub catfile ($$) {
@@ -556,13 +584,12 @@ sub dodiff ($$$$) {
 sub perlfn ($) {
     my ($file) = @_;
     # Protect file name from string expansion. 
-    '"'.quotemeta($file).'"';
+    $file =~ s/`/\\`/g;
+    "'$file'";
 }
 
 sub generate_perl ($) {
     my ($cmds) = @_;
-
-    my $ts = "".localtime(time);
 
     # Copy perl program from DATA.
     while ( <DATA> ) {
@@ -572,7 +599,7 @@ sub generate_perl ($) {
 	    last;
 	}
 
-	if ( /^#### Commands go here/ ) {
+	if ( /^#### META: Commands go here/ ) {
 	    foreach ( @$cmds ) {
 		my ($op, $file, $arg) = @$_;
 		if ( $op eq 'r' ) {
@@ -593,7 +620,7 @@ sub generate_perl ($) {
 		}
 	    }
 	}
-	elsif ( /^#### Check goes here/ ) {
+	elsif ( /^#### META: Check goes here/ ) {
 	    my $tag = "check (";
 	    foreach ( @checkfiles ) {
 		my ($file, $size) = @$_;
@@ -602,9 +629,9 @@ sub generate_perl ($) {
 	    }
 	    print STDOUT (");\n");
 	}
-	elsif ( /^#### Show options/ ) {
+	elsif ( /^#### META: Show options/ ) {
 	    print STDOUT ("# This program updates $old to $new.\n#\n");
-	    showopts ($ts);
+	    # showopts ();
 	}
 	elsif ( /^my \$olddir/ ) {
 	    print STDOUT ("my \$olddir = ".perlfn($old).";\n");
@@ -614,29 +641,18 @@ sub generate_perl ($) {
 	}
 	elsif ( /^It was generated/ ) {
 	    print STDOUT ("It was generated by " . $my_name . " " . 
-			  $my_version . " on " . $ts . ".\n");
+			  $my_version . " on " . $timestamp . ".\n");
 	}
 	elsif ( /^my \$endpat/ ) {
-	    print STDOUT ("my \$endpat = \"End of Patch [created: $ts]\";\n");
+	    print STDOUT ("my \$endpat = \"End of Patch [created: $timestamp]\";\n");
 	}
 	elsif ( /^my \$realsize/ ) {
-	    printf STDOUT ("my \$realsize = %d;\n", (-s $thepatch) + 3);
+	    printf STDOUT ("my \$realsize = %d;\n", (-s $thepatch));
 	}
 	else {
 	    print STDOUT $_;
 	}
     }
-
-    # Copy patch.
-    open (PATCH, $thepatch);
-    while ( <PATCH> ) {
-	print STDOUT $_;
-    }
-    close (PATCH);
-
-    # Print a reassuring "End of Patch" note so people won't
-    # wonder if their mailer truncated patches.
-    print STDOUT ("\n\nEnd of Patch [created: $ts]\n");
 }
 
 sub generate_shell ($) {
@@ -644,17 +660,16 @@ sub generate_shell ($) {
 
     my $tmp = '';
     $tmp = "\n#     /bin/sh <this-file>" if @goners || %newcomers;
-    my $ts = "".localtime(time);
     print STDOUT <<EOD;
 # This is a patch for $old to update it to $new.
-# It was generated by $my_name $my_version on $ts.
+# It was generated by $my_name $my_version on $timestamp.
 #
 # To apply this patch, chdir to directory $old and enter
 #$tmp
 #     patch -p0 -N < <this-file>
 #
 EOD
-    showopts ($ts);
+    showopts ();
     print STDOUT ("#\n");
     foreach ( @$cmds ) {
 	my ($op, $file, $arg) = @$_;
@@ -677,26 +692,15 @@ EOD
 exit
 # End of preamble.
 
-# Patch input follows.
+# Patch input follows
 EOD
-
-    # Copy patch.
-    open (PATCH, $thepatch);
-    print STDOUT while <PATCH>;
-    close (PATCH);
-
-    # Print a reassuring "End of Patch" note so people won't
-    # wonder if their mailer truncated patches.
-    print STDOUT ("\n\nEnd of Patch.\n");
 }
 
 sub YN ($) {
     $_[0] ? "Yes" : "No";
 }
 
-sub showopts ($) {
-    my ($ts) = @_;
-
+sub showopts () {
     my $opt_automanifest = $opt_automanifest || "(none)";
     my $opt_newmanifest  = $opt_newmanifest || "(none)";
     my $opt_oldmanifest  = $opt_oldmanifest || "(none)";
@@ -710,9 +714,9 @@ sub showopts ($) {
       ("# Patch characteristics:\n#\n",
        "#   New source            : $new\n",
        "#   Old source            : $old\n",
-       "#   Date generated        : $ts\n",
+       "#   Date generated        : $timestamp\n",
        "#   Generated by          : $my_name $my_version\n",
-       "#   Program written by    : Johan Vromans <jvromans\@squirrel.nl>\n",
+#       "#   Program written by    : Johan Vromans <jvromans\@squirrel.nl>\n",
        "#   Diff command used     : $opt_diff\n",
        "#   Recurse directories   : ", YN ($opt_recurse), "\n",
        "#   Follow symbolic links : ", YN ($opt_follow), "\n",
@@ -735,8 +739,7 @@ sub wrapup (;$) {
     if ( defined $reason ) {
 	print STDERR ("*** Aborted: $reason ***\n");
     }
-    verbose ("Collecting: $patched patch",
-	     $patched == 1 ? "" : "es", "... ");
+    verbose ("Collecting patches... ");
     print STDOUT ("\n") if $opt_verbose && -t STDOUT;
 
     my @cmds = ();
@@ -795,15 +798,26 @@ sub wrapup (;$) {
     if ( lc($opt_generate) eq 'perl' ) {
 	generate_perl (\@cmds);
     }
-    else {
-	generate_shell (\@cmds);
+    generate_shell (\@cmds);
+
+    # Copy patch.
+    open (PATCH, $thepatch);
+    while ( <PATCH> ) {
+	print STDOUT $_;
     }
+    close (PATCH);
+
+    # Print a reassuring "End of Patch" note so people won't
+    # wonder if their mailer truncated patches.
+    print STDOUT ("\nEnd of Patch [created: $timestamp]\n");
 
     return unless $opt_verbose;
 
     my $goners = scalar (@goners);
     print STDERR ("Collecting patches... ") if -t STDOUT;
     print STDERR ("done.\n");
+    print STDERR ("  $patched file",
+		  $patched == 1 ? "" : "s", " need to be patched.\n");
     if ( $created ) {
 	print STDERR ("  $created file", 
 		      $created == 1 ? "" : "s");
@@ -838,7 +852,7 @@ sub app_options () {
 	     "exclude-regex=s@"     	=> \@opt_exclude_regex,
 	     "exclude-vc!"		=> \$opt_exclude_vc,
 	     "exclude=s@"	     	=> \@opt_exclude,
-	     "filelist|list!"		=> \$opt_filelist,
+	     #"filelist|list!"		=> \$opt_filelist,
 	     "follow!"			=> \$opt_follow,
 	     "generate=s"		=> \$opt_generate,
 	     "help"                 	=> \$opt_help,
@@ -849,9 +863,9 @@ sub app_options () {
 	     "nomanifest!"		=> \$opt_nomanifest,
 	     "oldmanifest=s"		=> \$opt_oldmanifest,
 	     "patchlevel=s"		=> \$opt_patchlevel,
-	     "prefix=s"			=> \$opt_prefix,
+	     #"prefix=s"		=> \$opt_prefix,
 	     "quiet!"			=> sub { $opt_verbose = !$_[1]; },
-	     "sort!"			=> \$opt_sort,
+	     #"sort!"			=> \$opt_sort,
 	     "recurse!"			=> \$opt_recurse,
 	     "trace!"			=> \$opt_trace,
 	     "verbose!"			=> \$opt_verbose,
@@ -868,6 +882,9 @@ sub app_options () {
 	    print STDERR ("Error in MAKEPATCHINIT\n");
 	    app_usage ();
 	}
+	else {
+	    trace ("+ INIT: $init\n");
+	}
     }
 
     # Process ini file options.
@@ -880,78 +897,40 @@ sub app_options () {
     if ( open ($rcfile, $opt_rcfile) ) {
 	require Text::ParseWords;
 
-	if ( 0 ) {		# Use -options style
-	    my @lines = <$rcfile>;
-	    close ($rcfile);
-	    local (@ARGV) = Text::ParseWords::shellwords (@lines);
-	    unless ( GetOptions (@o) && @ARGV == 0 ) {
-		print STDERR ("Error in $opt_rcfile\n");
-		app_usage ();
+	local (@ARGV);
+	my $ok = 1;
+
+	# Intercept Getopt::Long warning messages.
+	local (%SIG);
+	my $warn;
+	$SIG{__WARN__} = sub { $warn = "@_"; };
+
+	# Process the file.
+	while ( <$rcfile> ) {
+	    # Skip blank and comment lines.
+	    next if /^\s*[;#]/;
+	    next unless /\S/;
+
+	    # Split.
+	    my @a = Text::ParseWords::shellwords ($_);
+	    $warn = '';
+	    trace ("+ RC: @a\n");
+	    # Handle.
+	    @ARGV = @a;
+	    unless ( GetOptions (@o) ) {
+		chomp ($warn);
+		print STDERR ("$warn -- at line $. in $opt_rcfile\n");
+		$ok = 0;
+	    }
+	    if ( @ARGV > 0 ) {
+		print STDERR ("Garbage \"@ARGV\"",
+			      " -- at line $. in $opt_rcfile\n");
+		$ok = 0;
 	    }
 	}
-	else {			# Use smail style
-
-	    local (@ARGV);
-	    my $ok = 1;
-
-	    # Intercept Getopt::Long warning messages.
-	    local (%SIG);
-	    my $warn;
-	    $SIG{__WARN__} = sub { $warn = "@_"; };
-
-	    # Process the file.
-	    while ( <$rcfile> ) {
-		# Skip blank and comment lines.
-		next if /^\s*[;#]/;
-		next unless /\S/;
-
-		# Make sure the "=" gets split.
-		s/=/ = /;
-
-		# Split.
-		my @a = Text::ParseWords::shellwords ($_);
-
-		# "option = value xxx".
-		if ( @a >= 3 && $a[1] eq "=" ) {
-		    @a = (shift(@a).shift(@a)."@a");
-		}
-		# "+ option" or "- option". Reduce.
-		elsif ( @a == 2 && $a[0] =~ /^[\-\+]$/ ) {
-		    @a = ($a[0].$a[1]);
-		}
-		# Process possibly reduced cases.
-		if ( @a == 1 ) {
-		    # "+opt" --> "--opt". Normal case.
-		    if ( $a[0] =~ /^\+(.*)/ ) {
-			push (@ARGV, "--".$1);
-		    }
-		    # "-opt" --> "--noopt". Negated case.
-		    elsif ( $a[0] =~ /^\-(.*)/ ) {
-			push (@ARGV, "--no".$1);
-		    }
-		    # "opt" or "opt=val". Normal case.
-		    else {
-			push (@ARGV, "--".$a[0]);
-		    }
-		    $warn = '';
-		    trace ("+ RC: @a\n");
-		    # Handle.
-		    unless ( GetOptions (@o) ) {
-			chomp ($warn);
-			print STDERR ("$warn -- at line $. in $opt_rcfile\n");
-			$ok = 0;
-		    }
-		}
-		else {
-		    print STDERR ("Error in input ",
-				  "-- at line $. in $opt_rcfile\n");
-		    $ok = 0;
-		}
-	    }
-	    close ($rcfile);
-	    unless ( $ok ) {
-		app_usage ();
-	    }
+	close ($rcfile);
+	unless ( $ok ) {
+	    app_usage ();
 	}
     }
     # File must be present if explicitly named.
@@ -992,7 +971,7 @@ sub app_options () {
 	  unless $opt_filelist;
     }
     else {
-	$opt_sort = 0;
+	$opt_sort = 1;
     }
     if ( $opt_filelist ) {
 	die ("$0: option \"-filelist\" only uses \"-manifest\"\n")
@@ -1047,7 +1026,6 @@ sub app_usage () {
 This is $my_name version $my_version
 
 Usage: $0 [options] old-src new-src
-Usage: $0 -filelist [ -prefix XXX ] [ -nosort ] [ -manifest ] file
 
 Makepatch options:
    -diff cmd		diff command to use, default \"$opt_diff\"
@@ -1064,13 +1042,27 @@ Makepatch options:
    -exclude-vc          exclude version control files (RCS, CVS, SCCS)
    -[no]recurse         recurse through directories (default)
    -generate XXX	style of output, either "perl" (default) or "shell"
+   -verbose		verbose output (default)
+   -quiet		no verbose output
+   -help		this message
+EoU
+    exit (1);
+}
+
+sub app_usage_filelist () {
+    print STDERR <<EoU;
+This is $my_name version $my_version
+
+Usage: $0 -filelist [ options ] [ -manifest ] file
 
 Filelist options:
    -[file]list		extract filenames from manifest file
    -prefix XXX		add a prefix to these filenames
    -nosort		do not sort manifest entries
-
-General options:
+   -man[ifest] file	list of files
+   -exclude pat         exclude files according to wildcard pattern
+   -exclude-regex pat   exclude files and dirs matching regex pattern
+   -exclude-vc          exclude version control files (RCS, CVS, SCCS)
    -verbose		verbose output (default)
    -quiet		no verbose output
    -help		this message
@@ -1082,17 +1074,23 @@ __DATA__
 eval 'exec perl -w $0 ${1+"$@"}'
   if $running_under_some_shell;
 $running_under_some_shell = 0;
+my $RCS_Id = '$Id: Patcher.pl,v 1.4 1998-11-07 20:51:11+01 jv Exp $ ';
 
-#### Show options
-
+#### META: Show options
+# IF YOU CANNOT RUN THIS PROGRAM using Perl, you can strip everything
+# up to and including the line __END__ and use the remainder as a
+# Shell script.
+# If you do not have a shell, you can feed it through the 'patch' 
+# program but you'll need to create new directories manually. See
+# the Shell script for details.
+#
 ################ Common stuff ################
 
 use strict;
 
 ################ Command line parameters ################
 
-use Getopt::Long 2.13;
-sub app_options();
+use Getopt::Long 2.00;
 
 my $olddir;
 my $newdir;
@@ -1103,18 +1101,18 @@ my $verbose = 0;		# verbose processing
 my $force = 0;			# allow continuation after trunc/corruption
 
 # Development options (not shown with -help).
-my $debug = 0;			# debugging
 my $trace = 0;			# trace (show process)
 my $test = 0;			# test (no actual processing)
 
 app_options();
 
 # Options post-processing.
-$trace |= ($debug || $test);
 $patch .= " -s" unless $verbose;
 
 ################ Presets ################
 
+my $endpat = "End of Patch";
+my $realsize = 1234;
 my $TMPDIR = $ENV{TMPDIR} || '/usr/tmp';
 
 ################ The Process ################
@@ -1127,25 +1125,12 @@ sub remove_directory ($);
 
 # Check that we're in the right place.
 
-#### Check goes here.
+#### META: Check goes here.
 
 # Verify the correctness of the patch.
+verify_patch ();
 
-my $size = 0;
-my $endpat = "End of Patch [$ts]";
-my $realsize = 1234;
-my $pos = tell (DATA);
-while ( <DATA> ) {
-    chomp;
-    last if $_ eq $endpat;
-    $size += length($_) + 1;
-}
-my $die = $force ? \&warn : \&die;
-$die->("No \"End of Patch\" seen -- possibly truncated\n")
-  unless $_ eq $endpat;
-$die->("CORRUPTION: Got $size bytes, expected $realsize bytes\n")
-  unless $size == $realsize;
-
+# Exit if no changes required.
 if ( $check ) {
     warn ("Check only -- no changes made\n");
     exit (0);
@@ -1153,25 +1138,52 @@ if ( $check ) {
 
 # Preamble.
 
-#### Commands go here.
+#### META: Commands go here.
 
 # End of preamble.
 
 # Execute the patch program.
-print STDERR ("+ $patch\n") if $trace;
-open (PATCH, "|$patch")
-  || die ("Cannot open pipe to \"$patch\"\n");
+execute_patch ();
 
-seek (DATA, $pos, 0);
-while ( <DATA> ) {
-    last if /^$endpat$/o;
-    print PATCH $_;
-}
-close (PATCH)
-  || die ("Possible problems with \"$patch\", status = $?\n");
 exit (0);
 
 ################ Subroutines ################
+
+sub verify_patch () {
+    my $size = 0;
+    my $pos = tell (DATA);
+    while ( <DATA> ) {
+	chomp;
+	last if $_ eq $endpat;
+	if ( $_ eq "# Patch input follows" ) {
+	    $size = 0;
+	}
+	else {
+	    $size += length($_) + 1;
+	}
+    }
+    my $die = $force ? sub {warn @_;} : 
+      sub { die (@_, "Use \"--force\" to override.\n"); };
+    $die->("No \"End of Patch\" seen -- possibly truncated\n")
+      unless $_ eq $endpat;
+    $size--;
+    $die->("CORRUPTION: Got $size bytes, expected $realsize bytes\n")
+      unless $size == $realsize;
+    seek (DATA, $pos, 0);
+}
+
+sub execute_patch () {
+    print STDERR ("+ $patch\n") if $trace;
+    open (PATCH, "|$patch")
+      || die ("Cannot open pipe to \"$patch\"\n");
+
+    while ( <DATA> ) {
+	last if /^$endpat$/o;
+	print PATCH $_;
+    }
+    close (PATCH)
+      || die ("Possible problems with \"$patch\", status = $?\n");
+}
 
 sub check (@) {
     my @args = @_;
@@ -1238,53 +1250,33 @@ sub remove_directory ($) {
 
 ################ Options and Help ################
 
-sub app_ident;
-sub app_usage($);
-
-sub app_options() {
+sub app_options () {
     my $help = 0;		# handled locally
-    my $ident = 0;		# handled locally
     my $dir;			# handled locally
 
     # Process options, if any.
     # Make sure defaults are set before returning!
     return unless @ARGV > 0;
+    my @opts = ('check'		=> \$check,
+		'dir=s'		=> \$dir,
+		'force'		=> \$force,
+		'verbose'	=> \$verbose,
+		'quiet'		=> sub { $verbose = 0; },
+		'patch=s'	=> \$patch,
+		'trace'		=> \$trace,
+		'help'		=> \$help);
     
-    if ( !GetOptions(
-		     'check'	=> \$check,
-		     'dir=s'	=> \$dir,
-		     'force'    => \$force,
-		     'ident'	=> \$ident,
-		     'verbose'	=> \$verbose,
-		     'quiet'	=> sub { $verbose = 0; },
-		     'patch=s'	=> \$patch,
-		     'trace'	=> \$trace,
-		     'help|?'	=> \$help,
-		     'debug'	=> \$debug,
-		    ) or $help )
-    {
-	app_usage(2);
-    }
-    app_ident if $ident || $verbose;
+    (!GetOptions (@opts) || $help) && app_usage (2);
 
-    if ( defined $dir ) {
-	chdir ($dir)
-	  || die ("Cannot change to $dir: $!\n");
-    }
+    (defined $dir) && (chdir ($dir) || die ("Cannot change to $dir: $!\n"));
 
 }
 
-sub app_ident {
-    print STDERR <<EOD;
+sub app_usage ($) {
+    my ($exit) = @_;
+    print STDERR <<EndOfUsage;
 This is a patch for $olddir to update it to $newdir.
 It was generated by makepatch.
-EOD
-}
-
-sub app_usage($) {
-    my ($exit) = @_;
-    app_ident;
-    print STDERR <<EndOfUsage;
 
 To apply this patch, chdir to the source directory $olddir
 and run this program. 
@@ -1293,15 +1285,15 @@ Usage: perl $0 [options] [file ...]
     -help		this message
     -dir		change to this directory before executing
     -check              check, but does not execute
-    -force              continue after check failures
+    -force              continue after verification failures
     -patch XXX		the patch command, default "$patch"
-    -ident		show identification
     -quiet		no information
     -verbose		verbose information
 EndOfUsage
-    exit $exit if $exit != 0;
+    exit $exit if defined $exit && $exit != 0;
 }
 __END__
+################ Documentation ################
 
 =head1 NAME
 
@@ -1311,6 +1303,7 @@ makepatch - create script to update a source tree
 
 B<makepatch> [ I<options> ] I<old-src> I<new-src>
 
+=for comment
 B<makepatch> B<-filelist> [ I<options> ] I<manifest>
 
 =head1 DESCRIPTION
@@ -1339,7 +1332,7 @@ transfer.
 Generation of commands to remove obsolete files and directories.
 
 Files and directories that were present in the old version but not in
-the new version are removed.
+the new version, are removed.
 
 =item *
 
@@ -1363,28 +1356,35 @@ The list of files to be processed can be controlled by so called
 I<manifest> files, and further restricted using shell filename
 patterns and B<perl>s regular expression patterns.
 
+=item *
+
+The source trees can be takes from standard archive files, like
+gzipped tar files and zip files.
+
 =back
 
-=head1 GENERAL USAGE
+=head1 General usage
 
-Suppose you have a directory tree C<pkg-1.16> containing the sources
-for a package version 1.16, and a directory tree C<pkg-1.17>
-containing the sources for version 1.17. The following command will
-generate a perl program that updates the 1.16 sources into their 1.17
+Suppose you have a directory tree `C<pkg-1.6>' containing the sources
+for package `C<pkg>' version 1.6, and a directory tree `C<pkg-1.7>'
+containing the sources for version 1.7. The following command will
+generate a perl program that updates the 1.6 sources into their 1.7
 versions:
 
-    makepatch pkg-1.16 pkg-1.17 > pkg-1.16-21.17.pl
+    makepatch pkg-1.6 pkg-1.7 > pkg-1.6-1.7.pl
 
-To apply this script, go to the pkg-1.16 directory and feed the
+To apply this script, go to the pkg-1.6 directory and feed the
 script to perl:
 
-    cd pkg-1.16
-    perl pkg-1.16-21.17.pl
+    cd pkg-1.6
+    perl pkg-1.6-1.7.pl
 
 The script will verify that it is executing in the right place and
 make all neccessary updates.
 
-=head1 ARGUMENTS
+=head1 Makepatch arguments
+
+B<makepatch> requires two arguments: I<old_src> and I<new_src>.
 
 =over 4
 
@@ -1396,13 +1396,9 @@ copies of the files I<prior> to any modifications.
 
 Alternatively, it may be the name of an archive that holds the files
 to be processed. Allowable archive formats are gzipped tar (name ends
-in "C<.tar.gz>" or "C<.tgz>"), plain tar (name end in "C<.tar>" and
-zip (name ends in "C<.zip>").
-
-B<Important:> When the archive is extracted, the files should be
-extracted to a directory that is the base name of the archive. E.g.
-C<pkg-1.17.tar.gz> must produce a directory C<pkg-1.17> that
-contains the sources.
+in "C<.tar.gz>" or "C<.tgz>"), bzipped tar (name ends in
+"C<.tar.bz2>"), plain tar (name ends in "C<.tar>" and zip (name ends in
+"C<.zip>").
 
 =item I<new-src>
 
@@ -1418,6 +1414,61 @@ to be processed.
 The patch script generated by B<makepatch> will take care of creating
 new files and directories, update existing files, and remove files and
 directories that are no longer present in the I<new-src> directory.
+
+=head1 MANIFEST files
+
+The purpose of a manifest file is to provide the list of files that
+constitute a package. Manifest files are traditionally called
+"C<MANIFEST>" and reside in the top level directory of the package.
+
+Although there is no formal standard for the contents of manifest
+files, B<makepatch> uses the following rules:
+
+=over 4
+
+=item *
+
+If the second line from the manifest file looks like a separator line
+(e.g. it is empty, or contains only dashes), it is discarded and so is
+the first line.
+
+=item *
+
+Empty lines and lines that start with a C<#> are ignored.
+
+=item *
+
+If there are multiple space-separated "words" on a line, the first
+word is considered to be the filename.
+
+=back
+
+=head2 Default treatment
+
+By default, B<makepatch> looks for files named "C<MANIFEST>" in the
+top level directories of the old and the new source trees. If these
+files (or one of them) are found, they are used.
+If no manifest file could be found, the package is assumed to consist
+of all files in the directory.
+
+The default name of the default manifest file can be modified with the
+command line option "C<-automanifest>", see Section L<Command line
+options>.
+
+=head2 Explicitly naming of manifest files
+
+Command line options "C<-oldmanifest>" and "C<-newmanifest>" can be
+used to explicitly designate old and new manifest files. Option
+"C<-manifest>" is a short way to set one manifest file for both the
+old and new source trees.
+
+=head2 Suppress manifest file processing
+
+Command line option "C<-nomanifest>" can be used to suppress all
+manifest file processing. The package is assumed to consist
+of all files in the source directories.
+
+=head1 Makepatch options
 
 B<makepatch> takes several options to control its behaviour. Options
 are usually specified on the command line, but B<makepatch> can take
@@ -1441,12 +1492,13 @@ An options file.
 By default, B<makepatch> looks for a file named B<.makepatchrc> in the
 user's home directory.
 
+Empty lines and lines starting with C<;> or C<#> are ignored. All
+other lines are considered to contain options exactly as if they had
+been supplied on the command line.
+
 An alternative options file can be specified with option B<-rcfile> in
 environment variable B<MAKEPATCHINIT>. This is the only way to specify
 an alternative options file name.
-
-See section L<OPTIONS FILE SYNTAX> for details on the contents of the
-options file.
 
 =item *
 
@@ -1454,7 +1506,7 @@ The command line.
 
 =back
 
-=head1 MAKEPATCH OPTIONS
+=head1 Command line options
 
 Options are matched case insensitive, and may be abbreviated to uniqueness.
 
@@ -1530,7 +1582,7 @@ will be replaced by the name of the new file. C<%%> will be replaced
 by a single C<%>; other C<%> sequences may be added in future
 versions.
 
-Note that C<%oP> and C<%nP> are modelled after the C<%> sequences of
+Note that C<%oP> and C<%nP> are modeled after the C<%> sequences of
 B<find -printf>.
 
 =item B<-exclude> I<pattern>
@@ -1559,11 +1611,13 @@ regular expressions:
 	     (\A|.*/)RCS(/.*|\Z)
              ,v\Z
 	     (\A|.*/)SCCS(/.*|\Z)
-             (\A|.*/)[sp]\..+\Z'
+             (\A|.*/)[sp]\..+\Z
+
+=begin comment
 
 =back
 
-=head1 FILELIST OPTIONS
+=head1 Filelist options
 
 =over
 
@@ -1594,9 +1648,9 @@ Retain the order of filenames from the manifest file.
 The exclude options B<-exclude>, B<-exclude-regex> and B<-exclude-vc>
 can also be used with B<filelist>.
 
-=head1 GENERAL OPTIONS
+=over *
 
-=over
+=end comment
 
 =item B<->[B<no>]B<ident>
 
@@ -1619,66 +1673,7 @@ the program immediately exits.
 
 =back
 
-=head1 MANIFEST FILE SYNTAX
-
-Although there is no formal standard for manifest files, the following
-rules apply:
-
-=over 4
-
-=item *
-
-If the second line from the manifest file looks like a separator line
-(e.g. it is empty, or contains only dashes), it is discarded and so is
-the first line.
-
-=item *
-
-Empty lines and lines that start with a C<#> are ignored.
-
-=item *
-
-If there are multiple space-separated ``words'' on a line, the first
-word is considered to be the filename.
-
-=back
-
-=head1 OPTIONS FILE SYNTAX
-
-The options file can contain option settings in the style of the
-popular mail program B<smail>.
-
-The lines of the option file can contain the following:
-
-=over 4
-
-=item *
-
-Nothing. Empty lines are ignored.
-
-=item *
-
-A comment, starting with a hatch C<#> or semicolon C<;>. Leading space
-is allowed. The line is ignored.
-
-=item *
-
-The name of an option that must be set. It may be preceeded by a plus
-sign, C<+>.
-
-=item *
-
-A minus sign followed by the name of an option that must be reset.
-
-=item *
-
-The name of an option, an equal sign C<=>, and the value to be assigned
-to this option. The value may be quoted but this is not mandatory.
-
-=back
-
-
-=head1 ENVIRONMENT VARIABLES
+=head1 Environment variables
 
 =over
 
@@ -1688,7 +1683,7 @@ When this environment variable is set its contents is considered to be
 command line options that are processed upon startup. All normal
 options are allowed, plus one: B<-rcfile >I<filename>. If B<-rcfile>
 is specified, the file is read and all lines of it are considered to
-contain option settings as described in section L<OPTIONS FILE SYNTAX>.
+contain option settings as described in section L<Makepatch options>.
 
 =item TMPDIR
 
@@ -1697,35 +1692,48 @@ placed. It defaults to C</usr/tmp>.
 
 =back
 
-=head1 EXAMPLES
+=head1 Examples
 
-Suppose you have a directory tree C<pkg-1.16> containing the sources
-for a popular package version 1.16, and a directory tree C<pkg-1.17>
-containing the sources for version 1.17. The following command will
-generate the patch file needed to transform the 1.16 sources into
-1.17:
+Suppose you have a directory tree `C<pkg-1.6>' containing the sources
+for package `C<pkg>' version 1.6, and a directory tree `C<pkg-1.7>'
+containing the sources for version 1.7. The following command will
+generate a perl program that updates the 1.6 sources into their 1.7
+versions:
 
-    makepatch pkg-1.16 pkg-1.17 > pkg-1.16-1.17.diff
+    makepatch pkg-1.6 pkg-1.7 > pkg-1.6-1.7.pl
+
+To apply this script, go to the pkg-1.6 directory and feed the
+script to perl:
+
+    cd pkg-1.6
+    perl pkg-1.6-1.7.pl
+
+The script will verify that it is executing in the right place and
+make all neccessary updates.
 
 This is one way to generate and use manifest files:
 
-    (cd pkg-1.16; find . -type f -print > OLDMANIFEST)
+    (cd pkg-1.6; find . -type f -print > OLDMANIFEST)
 
-    (cd pkg-1.17; find . -type f -print > NEWMANIFEST)
+    (cd pkg-1.7; find . -type f -print > NEWMANIFEST)
 
     makepatch \
-      -oldmanifest pkg-1.16/OLDMANIFEST \
-      -newmanifest pkg-1.17/NEWMANIFEST \
-      pkg-1.16 pkg-1.17 > pkg-1.16-1.17.diff
+      -oldmanifest pkg-1.6/OLDMANIFEST \
+      -newmanifest pkg-1.7/NEWMANIFEST \
+      pkg-1.6 pkg-1.7 > pkg-1.6-1.7.diff
+
+=begin comment
 
 The following example transforms the manifest file into a list of
 files suitable for GNU tar. Note the trailing C</> in the prefix
 string:
 
-  makepatch -filelist -prefix pkg-1.17/ pkg-1.17/MANIFEST | \
-    tar -cvf - -T -Op | gzip > pkg-1.17.tar.gz 
+  makepatch -filelist -prefix pkg-1.7/ pkg-1.7/MANIFEST | \
+    tar -cvf - -T -Op | gzip > pkg-1.7.tar.gz 
 
-=head1 BUGS AND RESTRICTIONS
+=end comment
+
+=head1 Bugs and restrictions
 
 Filenames thet contain single quotes may confuse the process.
 

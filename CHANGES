@@ -1,0 +1,116 @@
+Overall changes in makepatch version 2.0
+----------------------------------------
+
+ * Generates a perl program that applies the patches by running the
+   'patch' program. Optionally, a shell script can be generated as with
+   the 1.x version.
+   The generated perl program requires a normal perl5 installation and
+   the 'patch' program. No other tools (like shells) are required.
+
+   The generated perl program is the concatenation of:
+    - a perl 'Patcher' program;
+    - a shell preamble;
+    - the actual 'patch' input.
+
+   If running through perl fails due to perl contraints, the perl
+   preamble can be stripped off and the remainder used as a shell
+   script. If that fails due to shell constraints, new
+   files/directories should be created manually after which the shell
+   script can be fed to the 'patch' program.
+
+ * To avoid most common problems with buggy versions of the 'patch'
+   program, the patch data is relocated to the current directory. 
+   This obsoletes the command line options -fixpath and -fixallpath.
+
+   As a consequence, when a patch is generated from two directories,
+   e.g.:
+
+     makepatch src-1.0 src-1.1 > the-patch
+
+   it must be applied *IN* the directory src-1.0, e.g.
+
+     cd src-1.0; perl the-patch
+
+   When fed to patch directly, no -p option must be used:
+
+     cd src-1.0; patch < the-patch
+
+ * The generated perl program will apply some heuristics to determine
+   if it is in the correct directory before attempting to apply the
+   patch.
+
+ * The generated perl program will verify that the patch is complete,
+   i.e. not truncated or currupted.
+
+ * Program options can be specified in an environment variable, a file
+   as well as on the command line.
+
+ * Makepatch can take a standard source archive (.tar.gz, .tar.bz2,
+   .tar or .zip) as input instead of the sources directories.
+
+ * MANIFEST files are automatically used unless suppressed with the
+   new -nomanifest option.
+
+Changes in makepatch version 1.96 (2.0BETA)
+-------------------------------------------
+
+ * Extracted archives do not need to produce a single root directory.
+
+ * Use 'Getopt::Long' format options file.
+
+ * Add 'bzip2' style compression.
+
+ * Hide filelist function.
+
+Changes in makepatch version 1.95 (2.0BETA)
+-------------------------------------------
+This is makepatch 1.94.
+
+Changes in makepatch version 1.94 (2.0BETA)
+-------------------------------------------
+
+ * Use temp dir instead of temp files. Clean up after use.
+
+ * Add option -automanifest to automatically use $opt_manifest files if
+   present.
+
+ * Add option -nomanifest to suppress using manifest files.
+
+ * Relocate the patch to current dir. Eliminates old -fixpath and
+   -fixallpath options. Change 'patch -p1' to 'patch -p0'.
+
+ * Include (most) option settings in the output.
+
+ * Allow most option flags to be negatable.
+
+ * Use smail style settings in the options file.
+
+ * Check for end of patch, corruption and truncation before
+   applying the patch.
+
+ * Unpack .tar .tar.gz .tgz .zip archives automatically.
+
+Changes in makepatch version 1.93 (2.0BETA)
+-------------------------------------------
+
+ * Add env.var. MAKEPATCHINIT.
+   Add reading .makepatchrc and --rcfile option.
+   Add perl generation.
+
+Changes in makepatch version 1.92 (2.0BETA)
+-------------------------------------------
+
+ * Add -[no]recurse option.
+
+Changes in makepatch version 1.91 (2.0BETA)
+-------------------------------------------
+
+ * Allow -exclude to handle [..] style wildcards.
+   Check for dangerous filenames (with '"$`).
+
+Changes in makepatch version 1.90 (2.0BETA)
+-------------------------------------------
+
+ * Rework for Perl 5.
+
+ * Add -exclude, -exclude_regex, -exclude-vc.
