@@ -1,40 +1,11 @@
-#!/usr/local/bin/perl
-
-use Config;
-use File::Basename qw(&basename &dirname);
-
-# List explicitly here the variables you want Configure to
-# generate.  Metaconfig only looks for shell variables, so you
-# have to mention them as if they were shell variables, not
-# %Config entries.  Thus you write
-#  $startperl
-# to ensure Configure will look for $Config{startperl}.
-
-# This forces PL files to create target in same directory as PL file.
-# This is so that make depend always knows where to find PL derivatives.
-chdir(dirname($0));
-($file = basename($0)) =~ s/\.PL$//;
-$file =~ s/\.pl$//
-	if ($^O eq 'VMS' or $^O eq 'os2');  # "case-forgiving"
-
-open OUT,">$file" or die "Can't create $file: $!";
-
-print "Extracting $file (with variable substitutions)\n";
-
-# In this section, perl variables will be expanded during extraction.
-# You can use $Config{...} to use Configure variables.
-
-print OUT <<"!GROK!THIS!";
-$Config{'startperl'} 
-!GROK!THIS!
-print OUT <<'!NO!SUBS!';
+#!/usr/bin/perl -w
 # applypatch -- apply a 'makepatch' generated patch kit.
-my $RCS_Id = '$Id: applypatch.pl,v 1.11 1998-12-06 18:02:20+01 jv Exp $ ';
+my $RCS_Id = '$Id: applypatch.pl,v 1.12 1999-09-03 13:06:22+02 jv Exp $ ';
 # Author          : Johan Vromans
 # Created On      : Sat Nov 14 14:34:28 1998
 # Last Modified By: Johan Vromans
-# Last Modified On: Sun Dec  6 18:02:17 1998
-# Update Count    : 113
+# Last Modified On: Fri Sep  3 13:05:23 1999
+# Update Count    : 127
 # Status          : Released
 #
 
@@ -44,6 +15,8 @@ use File::Basename;
 use File::Spec;
 use IO;
 use Text::ParseWords;
+#use Diff;
+#use Patch;
 
 ################ Common stuff ################
 
@@ -53,7 +26,7 @@ use Text::ParseWords;
 
 my $my_package = 'Sciurix';
 my $my_name    = "applypatch";
-my $my_version = "2.00";
+my $my_version = "2.00_01";
 my $data_version = '1.0';
 
 $my_version .= '*' if length('$Locker:  $ ') > 12;
@@ -113,6 +86,7 @@ copy_input ();
 verify_files ();
 
 # Exit if just checking.
+die ("Okay\n") if $test && $check;
 exit (0) if $check;
 
 # Pre patch: create directories and files.
@@ -124,6 +98,7 @@ execute_patch ();
 # Post patch: adjust timestamps, remove obsolete files and directories.
 post_patch ();
 
+die ("Okay\n") if $test;
 exit (0);
 
 ################ Subroutines ################
@@ -133,10 +108,14 @@ sub copy_input () {
     my $lines = 0;		# checksum: #lines
     my $bytes = 0;		# checksum: #bytes
     my $sum = 0;		# checksum: system V sum
+    my $all_lines = 0;		# overall checksum: #lines
+    my $all_bytes = 0;		# overall checksum: #bytes
+    my $all_sum = 0;		# overall checksum: system V sum
     my $patchdata = 0;		# saw patch data
     my $pos = 0;		# start of patch data
     my $endkit = 0;		# saw end of kit
     my $fail = 0;		# failed
+    my $patch_checksum_okay = 0;# checksum for the patch was okay
 
     print STDERR ("Validate input.\n") if $verbose;
 
@@ -146,6 +125,7 @@ sub copy_input () {
 	    print STDERR (": $_\n") if $trace;
 	    $patchdata |= 1;	# bit 0 means: start seen
 	    $pos = $tmpfile->getpos;
+	    $lines = $bytes = $sum = 0;
 	}
 	elsif ( /^#### End of Patch data ####/ ) {
 	    print STDERR (": $_\n") if $trace;
@@ -169,19 +149,56 @@ sub copy_input () {
 		$fail = 1;
 	    }
 	}
-	elsif ( /^#### Checksum: (\d+) (\d+) (\d+) ####/ ) {
+	elsif ( /^#### Patch checksum: (\d+) (\d+) (\d+) ####/ ) {
+	    # Checksum for patch data only.
+	    # This _MUST_ preceed the overall checksum.
 	    print STDERR (": $_\n") if $trace;
+	    $patch_checksum_okay = 1;
 	    if ( $1 != $lines ) {
 		warn ("Linecount error: expecting $1, got $lines.\n");
 		$fail = 1;
+		$patch_checksum_okay = 0;
 	    }
 	    if ( $2 != $bytes ) {
 		warn ("Bytecount error: expecting $2, got $bytes.\n");
 		$fail = 1;
+		$patch_checksum_okay = 0;
 	    }
 	    if ( $3 != $sum ) {
 		warn ("Checksum error: expecting $3, got $sum.\n");
 		$fail = 1;
+		$patch_checksum_okay = 0;
+	    }
+	}
+	elsif ( /^#### Checksum: (\d+) (\d+) (\d+) ####/ ) {
+	    print STDERR (": $_\n") if $trace;
+	    if ( $patch_checksum_okay ) {
+		warn ("Warning: Overall linecount mismatch: ".
+		      "expecting $1, got $all_lines.\n")
+		  unless $1 == $all_lines || !$verbose;
+		warn ("Warning: Overall bytecount mismatch: ".
+		      "expecting $2, got $all_bytes.\n")
+		  unless $2 == $all_bytes || !$verbose;
+		warn ("Warning: Overall checksum mismatch: ".
+		      "expecting $3, got $all_sum.\n")
+		  unless $3 == $all_sum || !$verbose;
+	    }
+	    else {
+		if ( $1 != $all_lines ) {
+		    warn ("Overall linecount error: ".
+			  "expecting $1, got $all_lines.\n");
+		    $fail = 1;
+		}
+		if ( $2 != $all_bytes ) {
+		    warn ("Overall bytecount error: ".
+			  "expecting $2, got $all_bytes.\n");
+		    $fail = 1;
+		}
+		if ( $3 != $all_sum ) {
+		    warn ("Overall checksum error: ".
+			  "expecting $3, got $all_sum.\n");
+		    $fail = 1;
+		}
 	    }
 	}
 	elsif ( $applypatch == 1 ) {
@@ -205,10 +222,13 @@ sub copy_input () {
     continue {
 	# Calculate checksum.
 	$lines++;
+	$all_lines++;
 	$_ .= "\n";
 	$bytes += length ($_);
+	$all_bytes += length ($_);
 	# System V 'sum' checksum
 	$sum = ($sum + unpack ("%16C*", $_)) % 65535;
+	$all_sum = ($all_sum + unpack ("%16C*", $_)) % 65535;
 
 	# Copy the line to the temp file.
 	print $tmpfile ($_);
@@ -356,6 +376,19 @@ sub pre_patch () {
 
 }
 
+#sub execute_patch () {
+#    my $p = new IO::File;
+#    print STDERR ("+ $patch\n") if $trace;
+#    $p->open("|$patch") || die ("Cannot open pipe to \"$patch\": $!\n");
+#    if ( $applypatch ) {
+#	Text::Patch::applypatch (input => $tmpfile);
+#    }
+#    else {
+#	print $p ($_) while <$tmpfile>;
+#    }
+#    $p->close || die ("Possible problems with \"$patch\", status = $?.\n");
+#}
+#
 sub execute_patch () {
     my $p = new IO::File;
     print STDERR ("+ $patch\n") if $trace;
@@ -474,6 +507,7 @@ sub app_options () {
 		'verbose'	=> \$verbose,
 		'quiet'		=> sub { $verbose = 0; },
 		'patch=s'	=> \$patch,
+		'test'		=> \$test,
 		'trace'		=> \$trace,
 		'debug'		=> \$debug,
 		'help'		=> \$help);
@@ -498,6 +532,9 @@ Usage: $0 [options] patch-kit
 EndOfUsage
     exit $exit if defined $exit && $exit != 0;
 }
+
+1;
+
 __END__
 ################ Documentation ################
 
@@ -632,7 +669,7 @@ makepatch / applypatch project.
 
 =head1 COPYRIGHT AND DISCLAIMER
 
-This program is Copyright 1992,1998 by Squirrel Consultancy. All
+This program is Copyright 1992,1999 by Squirrel Consultancy. All
 rights reserved.
 
 This program is free software; you can redistribute it and/or modify
@@ -647,7 +684,3 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See either the
 GNU General Public License or the Artistic License for more details.
 
 =cut
-!NO!SUBS!
-close OUT or die "Can't close $file: $!";
-chmod 0755, $file or die "Can't reset permissions for $file: $!\n";
-exec("$Config{'eunicefix'} $file") if $Config{'eunicefix'} ne ':';

@@ -2,6 +2,14 @@ README
 INSTALL
 MANIFEST
 Makefile.PL
-makepatch.PL
-applypatch.PL
+script/makepatch
+script/applypatch
 CHANGES
+makepatch.spec
+#lib/Text/Diff.pm
+#lib/Text/Patch.pm
+#lib/Text/Filter.pm
+t/basic.t
+t/d1/tdata1
+t/d2/tdata1
+

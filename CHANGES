@@ -1,3 +1,15 @@
+Changes in 2.01
+---------------
+
+Calculate separate checksums for the patch data and the whole patch
+file. Do not complain if the checksum for the patch file is wrong, if
+the checksum for the patch data is okay. 
+
+This allows modification of the preamble of the patch file without
+affecting the integrity checking mechanism.
+
+A test program in now included with the kit.
+
 Overall changes in makepatch version 2.0
 ----------------------------------------
 
