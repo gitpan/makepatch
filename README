@@ -1,14 +1,20 @@
+WARNING: THIS IS BETA SOFTWARE --- PROCEED AT YOUR OWN RISK
+
 This is makepatch, a program to generate a patch file from two files
 or directories.
 
 It resembles "diff -c -r -N", but:
 
+  - generates a perl program to apply the patch
+  - verifies correctness of the patch, and the files to be patched;
   - it is recursive by default;
   - it handles 'patchlevel.h' first;
   - it supplies 'Index:' and 'Prereq:' lines;
+  - it relocates the patch to the current directory, avoiding problems 
+    with buggy patch programs;
   - it can use 'manifest' files;
   - it generates commands to create and remove files and directories;
-  - it can generate a perl program to apply the patches;
+  - it can generate a shell script to apply the patches;
   - it can manipulate manifest files.
   - it can exclude files using wildcard and regex patters.
 
