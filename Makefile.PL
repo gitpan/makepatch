@@ -2,8 +2,8 @@
 # Author          : Ulrich Pfeifer
 # Created On      : Mon Feb 17 10:51:47 1997
 # Last Modified By: Johan Vromans
-# Last Modified On: Sat Nov  7 20:58:04 1998
-# Update Count    : 29
+# Last Modified On: Fri Nov 13 23:08:39 1998
+# Update Count    : 31
 # Status          : Released
 
 # Verify perl version.
@@ -17,14 +17,14 @@ use File::Spec;
 
 use ExtUtils::MakeMaker;
 
-my @scripts = qw (makepatch);
+my @scripts = qw (makepatch applypatch);
 
 WriteMakefile
   (
    NAME         => 'makepatch',
    AUTHOR	=> 'Johan Vromans (jvromans@squirrel.nl)',
-   ABSTRACT	=> 'patchkit generating tool', 
-   VERSION      => 1.97,
+   ABSTRACT	=> 'patchkit generate and apply tool', 
+   VERSION      => 1.98,
    dist         => {COMPRESS =>"gzip", SUFFIX   =>"gz",},
    EXE_FILES    => \@scripts,
  );
