@@ -4,8 +4,8 @@ my $RCS_Id = '$Id: makepatch.pl,v 1.127 2001-04-08 10:59:47+02 jv Exp jv $ ';
 # Author          : Johan Vromans
 # Created On      : Tue Jul  7 20:39:39 1992
 # Last Modified By: Johan Vromans
-# Last Modified On: Wed Nov 21 21:51:16 2001
-# Update Count    : 1144
+# Last Modified On: Thu Nov 22 10:00:12 2001
+# Update Count    : 1168
 # Status          : Released
 #
 
@@ -20,7 +20,7 @@ use File::Path;
 
 my $my_package = 'Sciurix';
 my $my_name    = "makepatch";
-my $my_version = "2.00_06";
+my $my_version = "2.00_07";
 my $data_version = '1.0';
 
 $my_version .= '*' if length('$Locker: jv $ ') > 12;
@@ -40,7 +40,11 @@ my $opt_patchlevel;		# patchlevel.h file
 my $opt_prefix = '';		# prefix to be added
 my $opt_filelist = 0;		# make file list
 my $opt_infocmd;		# info command
-my $opt_exclude_vc = 0;		# exclude VC files
+my $opt_exclude_standard = 1;	# standard excludes
+my $opt_exclude_rcs = 0;	# exclude RCS files
+my $opt_exclude_cvs = 0;	# exclude CVS files
+my $opt_exclude_sccs = 0;	# exclude SCCS files
+my $opt_ignore_rcs_keywords = 0; # exclude CVS/RCS keyword data
 my @opt_exclude;		# list of excludes (wildcards)
 my @opt_exclude_regex;		# list of excludes (regex)
 my $opt_recurse = 1;		# recurse
@@ -105,28 +109,46 @@ app_options ();
 
 ################ Presets ################
 
-if ( $opt_exclude_vc ) {
+if ( $opt_exclude_sccs ) {
+    unshift (@opt_exclude, qw(p.* s.* SCCS));
+
+}
+
+if ( $opt_exclude_rcs ) {
+    unshift (@opt_exclude, ',*', '*,v', qw(RCS RCSLOG));
+}
+
+if ( $opt_exclude_cvs ) {
     # Load common .cvsignore, if present.
     for ( $ENV{HOME}."/.cvsignore" ) {
 	unshift (@opt_exclude, cvs_ignore($_)) if -s $_;
     }
 
-    # Standard ignores.
-    # Copied from 'Open Source Development with CVS', p. 170.
-    # Plus some more.
-    unshift (@opt_exclude, '.#*', '#*', ',v', '*,v',
-	     qw(. .. _$* *~ *$ p.* s.*
-		*.a *.bak *.BAK *.elc *.exe *.gz *.ln *.o *.obj
-		*.olb *.old *.orig *.rej *.so *.Z
-		.del-* .make.state .nse_depinfo core
-		CVS CVS.adm cvslog.*
-		RCS RCSLOG
-		SCCS
-		tags TAGS));
+    unshift (@opt_exclude, '.#*', '#*',
+	     qw(_$* *$ CVS CVS.adm cvslog.*));
 
 }
 
+if ( $opt_exclude_standard ) {
+    # Common excludes.
+    # Mostly copied from 'Open Source Development with CVS', p. 170.
+    unshift (@opt_exclude,
+	     qw(*~ *.a *.bak *.BAK *.elc *.exe *.gz *.ln *.o *.obj
+		*.olb *.old *.orig *.rej *.so *.Z
+		.del-* .make.state .nse_depinfo core
+		tags TAGS));
+}
+
 setup_excludes ();
+
+if ( $opt_ignore_rcs_keywords ) {
+    # Note: We ignore $Log$ since that wouldn't work anyway.
+    $opt_diff .= ' ' .
+      q{'--ignore-matching-lines=\\$\\(} .
+	join('\\|', qw(Author Date Header Id Locker Name RCSfile
+		       Revision Source State)) .
+	  q{\\)[^$]*\\$'};
+}
 
 ################ The Process ################
 
@@ -1126,13 +1148,21 @@ sub app_options () {
 	     "description=s@"		=> \@opt_descr,
 	     "diff=s"			=> \$opt_diff,
 	     "exclude-regex=s@"     	=> \@opt_exclude_regex,
-	     "exclude-vc!"		=> \$opt_exclude_vc,
+	     "exclude-standard!"	=> \$opt_exclude_standard,
+	     "exclude-rcs!"		=> \$opt_exclude_rcs,
+	     "exclude-sccs!"		=> \$opt_exclude_sccs,
+	     "exclude-cvs!"		=> \$opt_exclude_cvs,
+	     "exclude-vc!"		=> sub { $opt_exclude_rcs =
+						 $opt_exclude_cvs =
+						 $opt_exclude_sccs = $_[1] },
 	     "exclude=s@"	     	=> \@opt_exclude,
 	     "extract=s%"		=> \%opt_extract,
 	     "filelist|list!"		=> \$opt_filelist,
 	     "follow!"			=> \$opt_follow,
 	     "help"                 	=> \$opt_help,
 	     "ident!"			=> \$opt_ident,
+	     "ignore-cvs-keywords|ignore-rcs-keywords!"
+					=> \$opt_ignore_rcs_keywords,
 	     "infocmd=s"		=> \$opt_infocmd,
 	     "manifest=s"		=> \$opt_manifest,
 	     "newmanifest=s"		=> \$opt_newmanifest,
@@ -1320,6 +1350,11 @@ Makepatch options:
    -exclude pat         exclude files according to wildcard pattern
    -exclude-regex pat   exclude files and dirs matching regex pattern
    -exclude-vc          exclude version control files (RCS, CVS, SCCS)
+   -exclude-rcs         exclude version control files for RCS
+   -exclude-cvs         exclude version control files for CVS
+   -exclude-sccs        exclude version control files for SCCS
+   -ignore-cvs-keywords ignore diffs in CVS keyword data (same as RCS)
+   -ignore-rcs-keywords ignore diffs in RCS keyword data (same as CVS)
    -extract PAT=RULE	define an archive extraction rule
    -[no]recurse         recurse through directories (default)
    -generate XXX	style of output, either "perl" (default) or "shell"
@@ -1346,6 +1381,9 @@ Filelist options:
    -exclude pat         exclude files according to wildcard pattern
    -exclude-regex pat   exclude files and dirs matching regex pattern
    -exclude-vc          exclude version control files (RCS, CVS, SCCS)
+   -exclude-rcs         exclude version control files for RCS
+   -exclude-cvs         exclude version control files for CVS
+   -exclude-sccs        exclude version control files for SCCS
    -verbose		verbose output (default)
    -quiet		no verbose output
    -help		this message
@@ -1715,13 +1753,51 @@ If specified, files and directories that match the Perl regular
 expression pattern I<pattern> will be excluded. 
 Multiple B<-exclude-regex> options may be supplied.
 
-=item B<->[B<no>]B<exclude-vc>
+=item B<->[B<no>]B<exclude-standard>
+
+Set by default. If set, a common set of files and directories are ignored.
+
+See also section L<Standard Exclude Patterns>.
+
+=item B<->[B<no>]B<exclude-cvs>
 
 If set, files and directories that are usually part of version control
-systems are excluded. Supported version control systems are CVS, RCS
-and SCCS.
+system CVS are excluded.
 
 Also, C<.cvsignore> files are honoured just like CVS does it.
+
+See also section L<Standard Exclude Patterns>.
+
+=item B<->[B<no>]B<exclude-rcs>
+
+If set, files and directories that are usually part of version control
+system RCS are excluded. 
+
+See also section L<Standard Exclude Patterns>.
+
+=item B<->[B<no>]B<exclude-sccs>
+
+If set, files and directories that are usually part of version control
+system SCCS are excluded.
+
+See also section L<Standard Exclude Patterns>.
+
+=item B<->[B<no>]B<exclude-vc>
+
+Short for (re)setting B<-exclude-rcs>, B<-exclude-cvs>, and
+B<-exclude-sccs>.
+
+=item B<->[B<no>]B<ignore-cvs-keywords>
+
+Differences in CVS keyword data (e.g. C<Id>, C<Header>, C<Revision>)
+are ignored, provided there are no other differences in the same hunk.
+This option passes a very hairy regex to the
+B<--ignore-matching-lines> option of the I<diff> program, and hence
+requires GNU I<diff>. This restriction may be lifted in a future version.
+
+=item B<->[B<no>]B<ignore-rcs-keywords>
+
+Same as B<->[B<no>]B<ignore-cvs-keywords>.
 
 =item B<-extract> I<pattern>B<=>I<command>
 
@@ -1773,8 +1849,9 @@ Retain the order of filenames from the manifest file.
 
 =back
 
-The exclude options B<-exclude>, B<-exclude-regex> and B<-exclude-vc>
-can also be used with B<filelist>.
+The exclude options B<-exclude>, B<-exclude-regex>, B<-exclude-rcs>,
+B<-exclude-cvs>, B<-exclude-sccs> and B<-exclude-vc> can also be used
+with B<filelist>.
 
 =over *
 
@@ -1800,6 +1877,29 @@ If set, this causes a short help message to be displayed, after which
 the program immediately exits.
 
 =back
+
+=head1 Standard Exclude Patterns
+
+The following file patterns are always excluded:
+
+    *~ *.a *.bak *.BAK *.elc *.exe *.gz *.ln *.o *.obj
+    *.olb *.old *.orig *.rej *.so *.Z
+    .del-* .make.state .nse_depinfo core
+    tags TAGS
+
+Option B<-exclude-sccs> adds:
+
+    p.* s.* SCCS
+
+Option B<-exclude-rcs> adds:
+
+    ,* *,v RCS RCSLOG
+
+Option B<-exclude-cvs> adds C<.cvsignore> patterns, and:
+
+    .#* #* _$* *$ CVS CVS.adm cvslog.*
+
+Please let me know if I missed some.
 
 =head1 Environment variables
 

@@ -19,7 +19,7 @@ use Config;
 use ExtUtils::MakeMaker;
 
 # WriteMakefile parameter hash.
-my %p = ( NAME => 'makepatch', VERSION => "2.00_07" );
+my %p = ( NAME => 'makepatch', VERSION => "2.00_08" );
 
 # Extra info for newer versions.
 if ( $[ >= 5.005 ) {

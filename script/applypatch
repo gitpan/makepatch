@@ -1,11 +1,11 @@
 #!/usr/bin/perl -w
 # applypatch -- apply a 'makepatch' generated patch kit.
-my $RCS_Id = '$Id: applypatch.pl,v 1.17 2001-04-08 11:00:00+02 jv Exp $ ';
+my $RCS_Id = '$Id: applypatch.pl,v 1.17 2001-04-08 11:00:00+02 jv Exp jv $ ';
 # Author          : Johan Vromans
 # Created On      : Sat Nov 14 14:34:28 1998
 # Last Modified By: Johan Vromans
-# Last Modified On: Sun Apr  8 10:59:56 2001
-# Update Count    : 133
+# Last Modified On: Thu Nov 22 10:00:23 2001
+# Update Count    : 134
 # Status          : Released
 #
 
@@ -22,10 +22,10 @@ use Text::ParseWords;
 
 my $my_package = 'Sciurix';
 my $my_name    = "applypatch";
-my $my_version = "2.00_05";
+my $my_version = "2.00_07";
 my $data_version = '1.0';
 
-$my_version .= '*' if length('$Locker:  $ ') > 12;
+$my_version .= '*' if length('$Locker: jv $ ') > 12;
 
 ################ Globals ################
 
