@@ -2,8 +2,8 @@
 # Author          : Ulrich Pfeifer
 # Created On      : Mon Feb 17 10:51:47 1997
 # Last Modified By: Johan Vromans
-# Last Modified On: Thu Sep 19 22:49:18 2002
-# Update Count    : 94
+# Last Modified On: Mon Dec  8 23:17:45 2003
+# Update Count    : 95
 # Status          : Released
 
 # Verify perl version.
@@ -19,7 +19,7 @@ use Config;
 use ExtUtils::MakeMaker;
 
 # WriteMakefile parameter hash.
-my %p = ( NAME => 'makepatch', VERSION => "2.00_09" );
+my %p = ( NAME => 'makepatch', VERSION => "2.00_10" );
 
 # Extra info for newer versions.
 if ( $[ >= 5.005 ) {

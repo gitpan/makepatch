@@ -18,6 +18,8 @@ General
    program on Solaris (at least the versions I have access to) is
    buggy to the extent that it is unusable.
 
+ * Small fixes to avoid warnings under Perl 5.8.x and later.
+
 Makepatch
 
  * Some systems need to set environment variable TMPDIR (or TEMP) to
