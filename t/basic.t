@@ -96,7 +96,19 @@ else {
 }
 
 # Expect no output.
-print "not " if -s $tmpou2 > 0;
+# print "not " if -s $tmpou2 > 0;
+{
+    my $s;
+    if ( ($s = -s $tmpou2) > 0 ) {
+	open (FX, $tmpou2) or die ("$tmpou2: $!\n");
+	local $/;
+	my $c = <FX>;
+	close (FX);
+	$c =~ s/^/####/gm;
+	$c .= "####";
+	print ("# tmpou2[$tmpou2]s[$s]c[$c]\nnot ");
+    }
+}
 print "ok 4\n";
 
 # Remove temp files.

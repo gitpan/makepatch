@@ -2,8 +2,8 @@
 # Author          : Ulrich Pfeifer
 # Created On      : Mon Feb 17 10:51:47 1997
 # Last Modified By: Johan Vromans
-# Last Modified On: Mon Oct  4 20:16:36 1999
-# Update Count    : 85
+# Last Modified On: Sat Apr  7 17:27:01 2001
+# Update Count    : 87
 # Status          : Released
 
 # Verify perl version.
@@ -14,11 +14,12 @@ use Getopt::Long 2.00;
 use IO;
 use File::Basename;
 use File::Spec;
+use Config;
 
 use ExtUtils::MakeMaker;
 
 # WriteMakefile parameter hash.
-my %p = ( NAME => 'makepatch', VERSION => "2.00_03" );
+my %p = ( NAME => 'makepatch', VERSION => "2.00_04" );
 
 # Extra info for newer versions.
 if ( $[ >= 5.005 ) {
@@ -28,6 +29,18 @@ if ( $[ >= 5.005 ) {
 
 # Scripts.
 my @scripts = qw (makepatch applypatch);
+
+my $usrbin = "/usr/bin";
+my $installscript = $Config{installscript};
+
+print STDERR <<EOD unless $installscript eq $usrbin;
+
+WARNING: This Makefile will install user accessible scripts.
+The location for these scripts is $installscript.
+You may consider to pass INSTALLSCRIPT=$usrbin (or some other
+convenient location) to "make install".
+
+EOD
 
 if ( $^O eq "solaris" ) {
     print STDERR <<EOD;
