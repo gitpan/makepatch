@@ -2,8 +2,8 @@
 # Author          : Ulrich Pfeifer
 # Created On      : Mon Feb 17 10:51:47 1997
 # Last Modified By: Johan Vromans
-# Last Modified On: Fri Nov 13 23:08:39 1998
-# Update Count    : 31
+# Last Modified On: Tue Nov 17 23:17:21 1998
+# Update Count    : 32
 # Status          : Released
 
 # Verify perl version.
@@ -24,7 +24,7 @@ WriteMakefile
    NAME         => 'makepatch',
    AUTHOR	=> 'Johan Vromans (jvromans@squirrel.nl)',
    ABSTRACT	=> 'patchkit generate and apply tool', 
-   VERSION      => 1.98,
+   VERSION      => 1.99,
    dist         => {COMPRESS =>"gzip", SUFFIX   =>"gz",},
    EXE_FILES    => \@scripts,
  );

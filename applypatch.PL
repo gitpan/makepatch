@@ -29,12 +29,12 @@ $Config{'startperl'}
 !GROK!THIS!
 print OUT <<'!NO!SUBS!';
 # applypatch -- apply a 'makepatch' generated patch kit.
-my $RCS_Id = '$Id: applypatch.pl,v 1.7 1998-11-17 22:24:24+01 jv Exp $ ';
+my $RCS_Id = '$Id: applypatch.pl,v 1.8 1998-11-23 22:41:58+01 jv Exp $ ';
 # Author          : Johan Vromans
 # Created On      : Sat Nov 14 14:34:28 1998
 # Last Modified By: Johan Vromans
-# Last Modified On: Tue Nov 17 22:20:36 1998
-# Update Count    : 78
+# Last Modified On: Mon Nov 23 22:00:13 1998
+# Update Count    : 87
 # Status          : Experimental
 #
 
@@ -53,7 +53,7 @@ use Text::ParseWords;
 
 my $my_package = 'Sciurix';
 my $my_name    = "applypatch";
-my $my_version = "1.98";
+my $my_version = "1.99";
 my $data_version = '1.0';
 
 $my_version .= '*' if length('$Locker:  $ ') > 12;
@@ -105,7 +105,7 @@ my $tmpfile = IO::File->new_tmpfile;
 copy_input ();
 
 # Change dir if requested.
-(defined $dir) && (chdir ($dir) || die ("Cannot change to $dir: $!.\n"));
+(defined $dir) && (chdir ($dir) || die ("Cannot change to $dir: $!\n"));
 
 # Verify that we are in the right place.
 verify_files ();
@@ -323,9 +323,9 @@ sub pre_patch () {
 	if ( $op eq 'C' ) {
 	    $mode = oct($mode) & 0777;
 	    $mode = 0777 unless $mode; # sanity
-	    printf STDERR ("+ mkdir 0%o $fn\n", $mode) if $trace;
+	    printf STDERR ("+ mkpath $fn 0%o\n", $mode) if $trace;
 	    mkdir ($fn, $mode) 
-	      || die ("Cannot create directory $fn: $!.\n");
+	      || die ("Cannot create directory $fn: $!\n");
 	}
     }
 
@@ -333,15 +333,15 @@ sub pre_patch () {
 	my ($op, $fn, $size, $mtime, $mode) = @$_;
 
 	if ( $op eq 'c' ) {
-	    $mode = oct($mode) & 0777;
-	    $mode = 0666 unless $mode; # sanity
+	    #$mode = oct($mode) & 0777;
+	    #$mode = 0666 unless $mode; # sanity
 	    print STDERR ("+ create $fn\n") if $trace;
 	    open (F, '>'.$fn)
-	      || die ("Cannot create $fn: $!.\n");
+	      || die ("Cannot create $fn: $!\n");
 	    close (F);
-	    printf STDERR ("+ chmod 0%o $fn\n", $mode) if $trace;
-	    chmod ($mode, $fn)
-	      || warn sprintf ("WARNING: Cannot chmod 0%o $fn: $!.\n", $mode);
+	    #printf STDERR ("+ chmod 0%o $fn\n", $mode) if $trace;
+	    #chmod ($mode, $fn)
+	    #  || warn sprintf ("WARNING: Cannot chmod 0%o $fn: $!\n", $mode);
 	}
     }
 
@@ -350,7 +350,7 @@ sub pre_patch () {
 sub execute_patch () {
     my $p = new IO::File;
     print STDERR ("+ $patch\n") if $trace;
-    $p->open("|$patch") || die ("Cannot open pipe to \"$patch\": $!.\n");
+    $p->open("|$patch") || die ("Cannot open pipe to \"$patch\": $!\n");
 
     if ( $applypatch ) {
 	while ( <$tmpfile> ) {
@@ -365,6 +365,43 @@ sub execute_patch () {
     $p->close || die ("Possible problems with \"$patch\", status = $?.\n");
 }
 
+sub set_utime ($$;$) {
+    my ($fn, $mtime, $mode) = @_;
+    $mode = (stat ($fn))[2] unless defined $mode;
+    chmod (0777, $fn)
+      || warn ("WARNING: Cannot utime/chmod a+rwx $fn: $!\n");
+    print STDERR ("+ utime $fn $mtime (".localtime($mtime).")\n") if $trace;
+    utime ($mtime, $mtime, $fn)
+      || warn ("WARNING: utime($mtime,$fn): $!\n");
+    printf STDERR ("+ chmod 0%o $fn\n", $mode) if $trace;
+    chmod ($mode, $fn)
+      || warn sprintf ("WARNING: Cannot utime/chmod 0%o $fn: $!\n", $mode);
+}
+
+sub do_unlink ($) {
+    my ($fn) = @_;
+    my $mode = (stat($fn))[2];
+    chmod (0777, $fn)
+      || warn ("WARNING: Cannot unlink/chmod a+rwx $fn: $!\n");
+    print STDERR ("+ unlink $fn\n") if $verbose;
+    return if unlink ($fn);
+    warn ("WARNING: Cannot remove $fn: $!\n");
+    chmod ($mode, $fn)
+      || warn sprintf ("WARNING: Cannot unlink/chmod 0%o $fn: $!\n", $mode);
+}
+
+sub do_rmdir ($) {
+    my ($fn) = @_;
+    my $mode = (stat($fn))[2];
+    chmod (0777, $fn)
+      || warn ("WARNING: Cannot rmdir/chmod a+rwx $fn: $!\n");
+    print STDERR ("+ rmdir $fn\n") if $verbose;
+    return if rmdir ($fn);
+    warn ("WARNING: Cannot rmdir $fn: $!\n");
+    chmod ($mode, $fn)
+      || warn sprintf ("WARNING: Cannot rmdir/chmod 0%o $fn: $!\n", $mode);
+}
+
 sub post_patch () {
 
     my $suffix = $ENV{SIMPLE_BACKUP_SUFFIX} || ".orig";
@@ -373,24 +410,22 @@ sub post_patch () {
 	my ($op, $fn, $size, $mtime, $mode) = @$_;
 
 	if ( $op eq 'c' || $op eq 'C' || $op eq 'p' ) {
-	    print STDERR ("+ utime $fn $mtime (".localtime($mtime).")\n")
-	      if $trace;
-	    utime ($mtime, $mtime, $fn)
-	      || warn ("WARNING: utime($mtime,$fn): $!.\n");
+	    if ( defined $mode ) {
+		$mode = oct($mode) & 0777;
+		$mode = 0666 unless $mode; # sanity
+	    }
+	    set_utime ($fn, $mtime, $mode);
 	    next if $retain;
 	    $fn .= $suffix;
 	    if ( -f $fn ) {
-		print STDERR ("+ unlink $fn\n") if $trace;
-		unlink ($fn)
-		  || warn ("WARNING: Cannot remove $fn: $!.\n");
+		do_unlink ($fn);
 	    }
 	}
 	elsif ( $op eq 'r' ) {
 	    print STDERR ("+ unlink $fn\n") if $trace;
 	    # Be forgiving, maybe patch already removed the file.
 	    if ( -e $fn ) {
-		unlink ($fn)
-		  || warn ("WARNING: Cannot remove $fn: $!.\n");
+		do_unlink ($fn);
 	    }
 	    else {
 		warn ("Apparently, $fn has been removed already.\n");
@@ -400,14 +435,14 @@ sub post_patch () {
 	    print STDERR ("+ rmdir $fn\n") if $trace;
 	    # Maybe some future version of patch will take care of directories.
 	    if ( -e $fn ) {
-		rmdir ($fn)
-		  || warn ("WARNING: Cannot rmdir $fn: $!.\n");
+		do_rmdir ($fn);
 	    }
 	    else {
 		warn ("Apparently, $fn has been removed already.\n");
 	    }
 	}
     }
+
 }
 
 ################ Options and Help ################
@@ -582,7 +617,8 @@ makepatch / applypatch project.
 
 =head1 COPYRIGHT AND DISCLAIMER
 
-This program is Copyright 1992,1998 by Johan Vromans.
+This program is Copyright 1992,1998 by Squirrel Consultancy. All
+rights reserved.
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of either: a) the GNU General Public License as

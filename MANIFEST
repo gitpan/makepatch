@@ -3,4 +3,4 @@ MANIFEST
 Makefile.PL
 makepatch.PL
 applypatch.PL
-CHANGES
+ChangeLog

@@ -29,12 +29,12 @@ $Config{'startperl'}
 !GROK!THIS!
 print OUT <<'!NO!SUBS!';
 # makepatch.pl -- generate a patch kit from two files or directories.
-my $RCS_Id = '$Id: makepatch.pl,v 1.108 1998-11-17 22:24:24+01 jv Exp $ ';
+my $RCS_Id = '$Id: makepatch.pl,v 1.109 1998-11-23 22:39:45+01 jv Exp $ ';
 # Author          : Johan Vromans
 # Created On      : Tue Jul  7 20:39:39 1992
 # Last Modified By: Johan Vromans
-# Last Modified On: Tue Nov 17 22:23:52 1998
-# Update Count    : 902
+# Last Modified On: Mon Nov 23 22:22:53 1998
+# Update Count    : 951
 # Status          : Experimental
 #
 
@@ -52,7 +52,7 @@ use File::Spec;
 
 my $my_package = 'Sciurix';
 my $my_name    = "makepatch";
-my $my_version = "1.98";
+my $my_version = "1.99";
 my $data_version = '1.0';
 
 $my_version .= '*' if length('$Locker:  $ ') > 12;
@@ -62,7 +62,7 @@ $my_version .= " (2.0BETA)";
 
 ## Options and defaults
 
-my $opt_diff = 'diff -c';	# diff command
+my $opt_diff = 'diff -c';	# default diff command
 my $opt_sort;			# sort entries. Default = 1
 my $opt_follow = 0;		# follow symbolic links
 my $opt_automanifest = "MANIFEST";
@@ -78,6 +78,7 @@ my @opt_exclude;		# list of excludes (wildcards)
 my @opt_exclude_regex;		# list of excludes (regex)
 my $opt_recurse = 1;		# recurse
 my @opt_descr = ();		# description
+my %opt_extract = ();		# extraction rules
 
 # Development options (not shown with -help).
 my $opt_trace = 0;		# trace messages
@@ -91,6 +92,7 @@ my $exclude_pat;		# regex to exclude
 my @workq = ();			# pre/post work
 my $TMPDIR = $ENV{"TMPDIR"} || "/usr/tmp";
 my $dot = File::Spec->curdir;	# current dir
+my $dotdot = File::Spec->updir;	# parent dir
 my $nul = "/dev/null";		# NLA0:
 my $timestamp = "".localtime();	# timestamp, in string format
 my $nulpat = quotemeta ($nul);	# pattern to match nul
@@ -131,7 +133,6 @@ app_options ();
 ################ Presets ################
 
 setup_excludes ();
-$unified = $opt_diff =~ /\s(-u|-U|--unified)\b/;
 
 ################ The Process ################
 
@@ -140,8 +141,6 @@ if ( $opt_filelist ) {
     filelist ($ARGV[0]);
     exit (0);
 }
-
-my ($oldsrc, $newsrc) = @ARGV;
 
 # Create temp dir and names for temp files.
 my $tmpdir   = File::Spec->catdir ($TMPDIR, "mp$$.d");
@@ -153,6 +152,14 @@ my $patch    = new IO::File;
 # Attach cleanup handler.
 $SIG{INT} = \&cleanup;
 $SIG{QUIT} = \&cleanup;
+
+# The original (given) names for the source trees.
+my ($orig_old, $orig_new) = @ARGV;
+
+# Unpack archives, if applicable.
+# $old and $new now are the real locations for the source trees.
+my $old = check_extract ($orig_old, "old");
+my $new = check_extract ($orig_new, "new");
 
 # The process.
 makepatch ();
@@ -172,12 +179,6 @@ sub trace   (@) { print STDERR (@_) if $opt_trace;   }
 
 sub makepatch () {
 
-    my ($orig_old, $orig_new) = ($oldsrc, $newsrc);
-
-    # Unpack archives, if applicable.
-    my $old = check_extract ($orig_old, "old");
-    my $new = check_extract ($orig_new, "new");
-
     # This will bail out if the directory could not be created.
     $patch->open(">$thepatch") || die ("$thepatch: $!\n");
 
@@ -185,7 +186,7 @@ sub makepatch () {
 	# Two files.
 	verbose ("Old file = $orig_old.\n", "New file = $orig_new.\n");
 	dodiff ($dot, $new, $dot, $old) &&
-	  push (@workq, [ 'p', $old, -s $old, (stat($new))[9] ]);
+	  push (@workq, [ 'p', $old, -s $old, (stat($new))[9], (stat(_))[2] ]);
     }
     elsif ( -f $old && -d $new ) {
 	# File and dir -> File and dir/File.
@@ -193,11 +194,12 @@ sub makepatch () {
         verbose ("Old file = $orig_old.\n", "New file = $fn.\n");
 	if ( -f $fn ) {
 	    dodiff ($new, $old, $dot, $old) &&
-	      push (@workq, [ 'p', $old, -s $old, (stat($fn))[9] ]);
+	      push (@workq, [ 'p', $old, -s $old, 
+			      (stat($fn))[9], (stat(_))[2] ]);
 	}
 	else {
-	    newfile ($new, $old);
-	    push (@workq, [ 'c', $fn, 0, (stat($fn))[9], (stat(_))[2] ]);
+	    newfile ($new, $old) &&
+	      push (@workq, [ 'c', $fn, 0, (stat($fn))[9], (stat(_))[2] ]);
 	}
     }
     elsif ( -f $new && -d $old ) {
@@ -205,7 +207,8 @@ sub makepatch () {
 	verbose ("Old file = $fn.\n", "New file = $orig_new.\n");
 	if ( -f $new ) {
 	    dodiff ($dot, $new, $old, $new) &&
-	      push (@workq, [ 'p', $fn, -s $fn, (stat($new))[9] ]);
+	      push (@workq, [ 'p', $fn, -s $fn, 
+			      (stat($new))[9], (stat(_))[2] ]);
 	}
 	else {
 	    unshift (@workq, [ 'r', $fn, -s $fn, 0 ]);
@@ -231,32 +234,35 @@ sub makepatch () {
 
 	if ( defined $opt_oldmanifest ) {
 	    @old = make_filelist_from_manifest ($opt_oldmanifest);
+	    my $t = $orig_old eq $dot ? "current directory" :
+	      $orig_old eq $dotdot ? "parent directory" : $orig_old;
+	    message ("Manifest $opt_oldmanifest for $t contains ",
+		     scalar(@old), " file", @old == 1 ? "" : "s", ".\n");
 	}
 	else {
+	    my $t = $orig_old eq $dot ? "current directory" :
+	      $orig_old eq $dotdot ? "parent directory" :
+		"directory $orig_old";
+	    message ("Building file list for $t ...\n");
 	    @old = make_filelist ($old);
+	    message (ucfirst($t)." contains ",
+		     scalar(@old), " file", @old == 1 ? "" : "s", ".\n");
 	}
 
 	if ( defined $opt_newmanifest ) {
 	    @new = make_filelist_from_manifest ($opt_newmanifest);
-	}
-	else {
-	    @new = make_filelist ($new);
-	}
-
-	if ( $opt_verbose ) {
-	    message ("Old dir = $orig_old, file list = ",
-		     defined $opt_oldmanifest ? $opt_oldmanifest : "<*>",
-		     ", ", 
-		     scalar(@old), " file", @old == 1 ? "" : "s", ".\n",
-		     "New dir = $orig_new, file list = ",
-		     defined $opt_newmanifest ? $opt_newmanifest : "<*>",
-		     ", ", 
+	    my $t = $orig_new eq $dot ? "current directory" :
+	      $orig_new eq $dotdot ? "parent directory" : $orig_new;
+	    message ("Manifest $opt_newmanifest for $t contains ",
 		     scalar(@new), " file", @new == 1 ? "" : "s", ".\n");
 	}
-	elsif ( !$opt_quiet ) {
-	    message ("$orig_old contains ",
-		     scalar(@old), " file", @old == 1 ? "" : "s", ".\n",
-		     "$orig_new contains ",
+	else {
+	    my $t = $orig_new eq $dot ? "current directory" :
+	      $orig_new eq $dotdot ? "parent directory" :
+		"directory $orig_new";
+	    message ("Building file list for $t ...\n");
+	    @new = make_filelist ($new);
+	    message (ucfirst($t) . " contains ",
 		     scalar(@new), " file", @new == 1 ? "" : "s", ".\n");
 	}
 
@@ -275,12 +281,12 @@ sub makepatch () {
 					$old, $opt_patchlevel) ? 'p' : 'v',
 				$opt_patchlevel,
 				-s $oldpl,
-				(stat($newpl))[9] ]);
+				(stat($newpl))[9], (stat(_))[2] ]);
 	    }
 	    else {
-		newfile ($new, $opt_patchlevel);
-		push (@workq, [ 'c', $opt_patchlevel, 0, 
-				(stat($newpl))[9], (stat(_))[2] ]);
+		newfile ($new, $opt_patchlevel) &&
+		  push (@workq, [ 'c', $opt_patchlevel, 0, 
+				  (stat($newpl))[9], (stat(_))[2] ]);
 	    }
 	}
 	else {
@@ -302,9 +308,9 @@ sub makepatch () {
 		    undef $opt_patchlevel;
 		}
 		else {
-		    newfile ($new, $n);
-		    push (@workq, [ 'c', $n, 0, (stat(catfile($new,$n)))[9],
-				    (stat(_))[2] ]);
+		    newfile ($new, $n) &&
+		      push (@workq, [ 'c', $n, 0, (stat(catfile($new,$n)))[9],
+				      (stat(_))[2] ]);
                 }
 		undef $n;
 	    }
@@ -321,7 +327,8 @@ sub makepatch () {
 		else {
 		    dodiff ($new, $n, $old, $o) &&
 		      push (@workq, [ 'p', $o, -s catfile($old,$o),
-				      (stat(catfile($new,$n)))[9] ]);
+				      (stat(catfile($new,$n)))[9],
+				      (stat(_))[2] ]);
 		}
 		undef $n;
 		undef $o;
@@ -453,11 +460,20 @@ sub make_filelist_from_manifest ($) {
 sub check_extract ($$) {
     my ($arg, $tag) = @_;
 
-    my @exctrl = ("\.(tar\.gz|tgz)" => "gzip -d | tar xf -",
-		  "\.(tar\.bz2)"    => "bzip2 -d | tar xf -",
-		  "\.(tar)"         => "tar xf -",
-		  "\.(zip)"         => "unzip -",
+    my @exctrl = ('.+\.(tar\.gz|tgz)' => "gzip -d | tar xpf -",
+		  '.+\.(tar\.bz2)'    => "bzip2 -d | tar xpf -",
+		  '.+\.(tar)'         => "tar xf -",
+		  '.+\.(zip)'         => "unzip -",
 		 );
+
+    # Plug in user defined rules.
+    if ( %opt_extract ) {
+	my ($k, $v);
+	while ( ($k,$v) = each (%opt_extract) ) {
+	    unshift (@exctrl, $v);
+	    unshift (@exctrl, $k);
+	}
+    }
 
     $arg = File::Spec->canonpath ($arg);
     my $base = basename ($arg);
@@ -465,7 +481,7 @@ sub check_extract ($$) {
     while ( @exctrl > 0 ) {
 	my $pat = shift (@exctrl);
 	my $cmd = shift (@exctrl);
-	if ( $base =~ /^(.+)$pat$/i ) {
+	if ( $base =~ /^$pat$/is ) {
 	    my $newkit = extract ($arg, $cmd, $tag);
 	    verbose ("Using $newkit for $arg\n");
 	    return $newkit;
@@ -486,7 +502,7 @@ sub extract ($$$) {
     # Extract the kit.
     $cmd = "( cd $tmp; $cmd ) < $kit";
     trace ("+ $cmd\n");
-    my $ret = system ($cmd);
+    my $ret = system ("$cmd 1>&2");
     exit (1) if $ret || ($? & 127);
 
     # Inspect the directory.
@@ -513,6 +529,16 @@ sub dodiff ($$$$) {
     my $oldfn = catfile ($olddir, $old);
     my $newfn = catfile ($newdir, $new);
 
+    # Check for binary files.
+    if ( -B $oldfn ) {
+	warn ("WARNING: Binary file $oldfn -- skipped\n");
+	return 0;
+    }
+    if ( -B $newfn ) {
+	warn ("WARNING: Binary file $newfn -- skipped\n");
+	return 0;
+    }
+
     # Produce a patch hunk.
     my $cmd = $opt_diff . ' ' . quotfn($oldfn) . ' ' . quotfn($newfn);
     trace ("+ ", $cmd, "\n");
@@ -536,7 +562,9 @@ sub dodiff ($$$$) {
 	print $patch (`$cmd`);
     }
 
-    print $patch ("Index: $old\n");
+    # By prepending $dot to the names, we can use 'path -p0' as well
+    # as 'patch -p1'.
+    print $patch ("Index: ", File::Spec->catfile($dot,$old), "\n");
 
     # Try to find a prereq.
     # The RCS code is based on a suggestion by jima@netcom.com, who also
@@ -557,24 +585,40 @@ sub dodiff ($$$$) {
     # Copy patch.
     $fh->open($tmpfile) || die ("$tmpfile: $!\n");
     
-    # Replace patch header.
-    if ( $unified ) {
-	print $patch ("--- ", $old, "\t" . localtime((stat($oldfn))[9]), "\n",
-		      "+++ ", $new, "\t" . localtime((stat($newfn))[9]), "\n");
-	while ( <$fh> ) {
-	    if ( /^\@\@/ ) {
-		print $patch ($_);
-		last;
-	    }
+    # Skip to beginning of patch. Adjust $unified if needed.
+    my $found = 0;
+    while ( <$fh> ) {
+	if ( /^\@\@/ ) {
+	    $unified = 1;
+	    $found = 1;
+	    last;
+	}
+	elsif ( /^\*{15}/ ) {
+	    $unified = 0;
+	    $found = 1;
+	    last;
 	}
     }
+    unless ( $found ) {
+	die ("ALARM: No patch data found for $old\n",
+	     "Something is wrong with your diff command \"$opt_diff\".\n",
+	     "It should produce context or unified diff output.\n");
+    }
+
+    # Replace patch header.
+    if ( $unified ) {
+	print $patch ("--- ", File::Spec->catfile($dot,$old),
+		      "\t" . localtime((stat($oldfn))[9]), "\n",
+		      "+++ ", File::Spec->catfile($dot,$new),
+		      "\t" . localtime((stat($newfn))[9]), "\n",
+		      $_);
+    }
     else {
-	print $patch ("*** ", $old, "\t" . localtime((stat($oldfn))[9]), "\n",
-		      "--- ", $new, "\t" . localtime((stat($newfn))[9]), "\n",
-		      "***************\n");
-	while ( <$fh> ) {
-	    last if /^\*{15}/;
-	}
+	print $patch ("*** ", File::Spec->catfile($dot,$old),
+		      "\t" . localtime((stat($oldfn))[9]), "\n",
+		      "--- ", File::Spec->catfile($dot,$new),
+		      "\t" . localtime((stat($newfn))[9]), "\n",
+		      $_);
     }
 
     # Copy rest.
@@ -595,7 +639,11 @@ sub newfile ($$) {
     my $lines = 0;
     unless ( $fh->open($newfn) ) {
 	warn ("$newfn: $!\n");
-	return;
+	return 0;
+    }
+    if ( -B $fh ) {
+	warn ("WARNING: Binary file $new -- skipped\n");
+	return 0;
     }
     my $pos = $fh->getpos;
     while ( <$fh> ) {
@@ -617,6 +665,8 @@ sub newfile ($$) {
 
     print $patch ("Index: $new\n");
 
+    $lines = "1,$lines" unless $lines == 1;
+
     if ( $unified ) {
 	print $patch ("--- ", $new, "\t" . localtime(0), "\n",
 		      "+++ ", $new, "\t" . localtime((stat($fh))[9]), "\n",
@@ -637,6 +687,7 @@ sub newfile ($$) {
     }
 
     $fh->close;
+    return 1;
 }
 
 sub remove_file ($$) {
@@ -644,15 +695,17 @@ sub remove_file ($$) {
     #  *** t1/f2       Tue Jul  7 21:28:45 1992
     #  --- t2/f2       Thu Jan  1 01:00:00 1970
     #  ***************
-    #  *** 1 ****
+    #  *** 1,1 ****
     #  - foo
+    #  - bar
     #  --- 0 ----
 
     #  diff -u -N -r t1/f2 t2/f2
     #  --- t1/f2       Tue Jul  7 21:28:45 1992
     #  +++ t2/f2       Thu Jan  1 01:00:00 1970
-    #  @@ -1 +0,0 @@
+    #  @@ -1,1 +0,0 @@
     #  -foo
+    #  -bar
 }
 
 sub quotfn ($) {
@@ -686,9 +739,29 @@ sub wrapup (;$) {
 	return;
     }
 
+    # Construct a description, if possible.
+    if ( @opt_descr == 0 ) {
+	my $old = $old;
+	# Reduce to root if extracted.
+	$old = basename($old)
+	  if File::Spec->catdir($tmpdir,"old") eq dirname($old);
+	my $new = $new;
+	# Reduce to root if extracted.
+	$new = basename($new)
+	  if File::Spec->catdir($tmpdir,"new") eq dirname($new);
+	# We can infer a name if the file name does not contain a
+	# directory part, and is not equal to . or ..
+	if ( $old ne $dot && $old ne $dotdot && basename($old) eq $old &&
+	     $new ne $dot && $new ne $dotdot && basename($new) eq $new
+	   ) {
+	    @opt_descr = ("This is a patch for $old to update it to $new");
+	}
+    }
+
     # Get a description, unless provided.
-    unless ( @opt_descr ) {
-	print STDERR ("Enter patch description, terminated with a single '.':\n>> ");
+    if ( @opt_descr == 0 ) {
+	print STDERR ("Enter patch description, ",
+		      "terminated with a single '.':\n>> ");
 	while ( <STDIN> ) {
 	    chomp;
 	    last if $_ eq ".";
@@ -702,10 +775,10 @@ sub wrapup (;$) {
     verbose ("Collecting patches... ");
     print STDOUT ("\n") if $opt_verbose && -t STDOUT;
 
-    my $goners = 0;		# files removed
-    my $newcomers = 0;		# files added
+    my $removed = 0;		# files removed
+    my $created = 0;		# files added
     my $patched = 0;		# files patched
-    my $dgoners = 0;		# directories removed
+    my $dremoved = 0;		# directories removed
     my $dcreated = 0;		# directories created
 
     {	my @goners = ();
@@ -718,8 +791,8 @@ sub wrapup (;$) {
 	    push (@goners, $fn) if $op eq 'r';
 	    $patched++ if $op eq 'p';
 	}
-	$newcomers = @newcomers;
-	$goners = @goners;
+	$created = @newcomers;
+	$removed = @goners;
 	foreach ( sort @goners ) {
 	    # WARNING: This code assumes you are running some Unix.
 	    my @p = split (/\//, $_);
@@ -727,9 +800,8 @@ sub wrapup (;$) {
 	    foreach my $i ( (1-@p)..0 ) {
 		my $dir = join('/',@p[0..-$i]);
 		unless ( defined $dir_gone{$dir} ) {
-		    #### TODO: This does not work when newsrc is an archive
-		    unless ( -d catfile($newsrc,$dir) ) {
-			$dgoners++;
+		    unless ( -d catfile($new,$dir) ) {
+			$dremoved++;
 			$dir_gone{$dir} = 1;
 		    }
 		}
@@ -748,10 +820,9 @@ sub wrapup (;$) {
 	    foreach my $i ( 0..(@p-1) ) {
 		my $dir = join('/',@p[0..$i]);
 		unless ( defined $dir_ok{$dir} ) {
-		    #### TODO: This does not work when old/newsrc is an archive
-		    unless ( -d catfile($oldsrc,$dir) ) {
+		    unless ( -d catfile($old,$dir) ) {
 			push (@workq, [ 'C', $dir, 0, 0, 
-					(stat(catfile($newsrc,$dir)))[2] ]);
+					(stat(catfile($new,$dir)))[2] ]);
 			$dcreated++;
 		    }
 		    $dir_ok{$dir} = 1;
@@ -779,16 +850,16 @@ sub wrapup (;$) {
 # To apply this patch without the use of 'applypatch':
 # STEP 1: Chdir to the source directory.
 EOD
-    if ( $goners || $newcomers ) {
+    if ( $removed || $created ) {
 	my $cd = "";
 	my $fd = "";
-	$cd = "create" if $newcomers;
-	if ( $goners ) {
+	$cd = "create" if $created;
+	if ( $removed ) {
 	    $cd .= "/" if $cd;
 	    $cd .= "delete";
 	}
 	$fd = "files";
-	if ( $dcreated || $dgoners ) {
+	if ( $dcreated || $dremoved ) {
 	    $fd .= "/" if $fd;
 	    $fd .= "directories";
 	}
@@ -862,7 +933,7 @@ EOD
 	my ($op, $file, @args) = @$_;
 	$file = quotfn ($file);
 	print $fh ("# ", $op, " ", $file);
-	if ( defined ($args[2]) && ($op eq 'c' || $op eq 'C') ) {
+	if ( defined ($args[2]) && ($op eq 'c' || $op eq 'C' || $op eq 'p') ) {
 	    $args[2] = sprintf ("0%o", $args[2]);
 	}
 	print $fh (" ", join(" ", @args)) if @args;
@@ -889,24 +960,24 @@ EOD
     $fh->close;
     print STDOUT ("#### Checksum: $lines $bytes $sum ####\n");
 
-    return unless $opt_verbose;
+    # return unless $opt_verbose;
 
-    message ("Collecting patches... ") if -t STDOUT;
-    message ("done.\n");
+    verbose ("Collecting patches... ") if -t STDOUT;
+    verbose ("done.\n");
     message ("  $patched file",
 	     $patched == 1 ? "" : "s", " need to be patched.\n");
-    if ( $newcomers ) {
-	message ("  $newcomers file", $newcomers == 1 ? "" : "s");
+    if ( $created ) {
+	message ("  $created file", $created == 1 ? "" : "s");
 	message (" and $dcreated director", 
 		 $dcreated == 1 ? "y" : "ies") if $dcreated;
-	message (" need", ($dcreated+$newcomers != 1) ? "" : "s",
+	message (" need", ($created+$dcreated != 1) ? "" : "s",
 		 " to be created.\n");
     }
-    if ( $goners ) {
-	message ("  $goners file", $goners == 1 ? "" : "s");
-	message (" and $dgoners director", 
-		 $dgoners == 1 ? "y" : "ies") if $dgoners;
-	message (" need", ($goners+$dgoners != 1) ? "" : "s",
+    if ( $removed ) {
+	message ("  $removed file", $removed == 1 ? "" : "s");
+	message (" and $dremoved director", 
+		 $dremoved == 1 ? "y" : "ies") if $dremoved;
+	message (" need", ($removed+$dremoved != 1) ? "" : "s",
 		 " to be removed.\n");
     }
 }
@@ -934,6 +1005,7 @@ sub app_options () {
 	     "exclude-regex=s@"     	=> \@opt_exclude_regex,
 	     "exclude-vc!"		=> \$opt_exclude_vc,
 	     "exclude=s@"	     	=> \@opt_exclude,
+	     "extract=s%"		=> \%opt_extract,
 	     "filelist|list!"		=> \$opt_filelist,
 	     "follow!"			=> \$opt_follow,
 	     "help"                 	=> \$opt_help,
@@ -1124,6 +1196,7 @@ Makepatch options:
    -exclude pat         exclude files according to wildcard pattern
    -exclude-regex pat   exclude files and dirs matching regex pattern
    -exclude-vc          exclude version control files (RCS, CVS, SCCS)
+   -extract PAT=RULE	define an archive extraction rule
    -[no]recurse         recurse through directories (default)
    -generate XXX	style of output, either "perl" (default) or "shell"
    -verbose		verbose progress information
@@ -1408,7 +1481,10 @@ Options are matched case insensitive, and may be abbreviated to uniqueness.
 Provide a descriptive text for this patch. Multiple B<-description>
 options may be supplied.
 
-If no description is provided, the program will ask for one.
+If no description is provided, the program try to guess one. This is
+usually possible if both directories are simple names, e.g.
+'C<pkg-1.16>'. If no description can be determined, the program will
+ask for one.
 
 =item B<-diff> I<cmd>
 
@@ -1417,6 +1493,7 @@ generate the differences between the two versions of the files.  If
 not specified, this command defaults to "C<diff -c>".
 
 For best results, only use "C<diff -c>" or "C<diff -u>".
+In any case, it B<must> produce either context or unified diff output.
 
 =item B<-patchlevel> I<pfile>
 
@@ -1504,6 +1581,24 @@ regular expressions:
              ,v\Z
 	     (\A|.*/)SCCS(/.*|\Z)
              (\A|.*/)[sp]\..+\Z
+
+=item B<-extract> I<pattern>B<=>I<command>
+
+Define additional extraction rules for archives. If the name of the
+source or destination matches the Perl I<pattern>, the I<command> is
+executed with the archive on standard input and the current directory
+set to the location where the files must be extracted. Multiple
+B<-extract> options may be supplied. User defined rules override
+built-in rules.
+
+Built-in rules are:
+
+    .+\.(tar\.gz|tgz)    => "gzip -d | tar xpf -"
+    .+\.(tar\.bz2)       => "bzip2 -d | tar xpf -"
+    .+\.tar              => "tar xf -"
+    .+\.zip              => "unzip -"
+
+The patterns are implicitly anchored to the begin and end of the filename.
 
 =begin comment
 
@@ -1647,7 +1742,8 @@ Sanden, Rob Browning, and others.
 
 =head1 COPYRIGHT AND DISCLAIMER
 
-This program is Copyright 1992,1998 by Johan Vromans.
+This program is Copyright 1992,1998 by Squirrel Consultancy. All
+rights reserved.
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of either: a) the GNU General Public License as
