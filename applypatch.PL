@@ -29,13 +29,13 @@ $Config{'startperl'}
 !GROK!THIS!
 print OUT <<'!NO!SUBS!';
 # applypatch -- apply a 'makepatch' generated patch kit.
-my $RCS_Id = '$Id: applypatch.pl,v 1.8 1998-11-23 22:41:58+01 jv Exp $ ';
+my $RCS_Id = '$Id: applypatch.pl,v 1.10 1998-12-04 10:59:46+01 jv Exp $ ';
 # Author          : Johan Vromans
 # Created On      : Sat Nov 14 14:34:28 1998
 # Last Modified By: Johan Vromans
-# Last Modified On: Mon Nov 23 22:00:13 1998
-# Update Count    : 87
-# Status          : Experimental
+# Last Modified On: Fri Dec  4 10:58:43 1998
+# Update Count    : 111
+# Status          : Released
 #
 
 use strict;
@@ -53,7 +53,7 @@ use Text::ParseWords;
 
 my $my_package = 'Sciurix';
 my $my_name    = "applypatch";
-my $my_version = "1.99";
+my $my_version = "2.00";
 my $data_version = '1.0';
 
 $my_version .= '*' if length('$Locker:  $ ') > 12;
@@ -73,6 +73,7 @@ my $force = 0;			# allow continuation after trunc/corruption
 # Development options (not shown with -help).
 my $trace = 0;			# trace (show process)
 my $test = 0;			# test (no actual processing)
+my $debug = 0;			# extensive debugging info
 
 ## Misc
 
@@ -93,6 +94,8 @@ sub verify_files ();
 ################ Program parameters ################
 
 app_options();
+$trace ||= $debug;
+$verbose ||= $trace;
 
 ################ Presets ################
 
@@ -141,19 +144,24 @@ sub copy_input () {
     while ( <> ) {
 	chomp;
 	if ( /^#### Patch data follows ####/ ) {
+	    print STDERR (": $_\n") if $trace;
 	    $patchdata |= 1;	# bit 0 means: start seen
 	    $pos = $tmpfile->getpos;
 	}
 	elsif ( /^#### End of Patch data ####/ ) {
+	    print STDERR (": $_\n") if $trace;
 	    $patchdata |= 2;	# bit 1 means: end seen
 	}
 	elsif ( /^#### ApplyPatch data follows ####/ ) {
+	    print STDERR (": $_\n") if $trace;
 	    $applypatch |= 1;
 	}
 	elsif ( /^#### End of ApplyPatch data ####/ ) {
+	    print STDERR (": $_\n") if $trace;
 	    $applypatch |= 2;
 	}
 	elsif ( /^#### End of Patch kit (\[created: ([^\]]+)\] )?####/ ) {
+	    print STDERR (": $_\n") if $trace;
 	    $endkit = 1;
 	    if ( defined $timestamp && defined $2 && $2 ne $timestamp ) {
 		warn ("Timestamp mismatch ",
@@ -163,6 +171,7 @@ sub copy_input () {
 	    }
 	}
 	elsif ( /^#### Checksum: (\d+) (\d+) (\d+) ####/ ) {
+	    print STDERR (": $_\n") if $trace;
 	    if ( $1 != $lines ) {
 		warn ("Linecount error: expecting $1, got $lines.\n");
 		$fail = 1;
@@ -178,6 +187,7 @@ sub copy_input () {
 	}
 	elsif ( $applypatch == 1 ) {
 	    if ( /^# Data version\s*:\s*(\d+\.\d+)$/ ) {
+		print STDERR (": $_\n") if $trace;
 		if ( $1 > $data_version ) {
 		    warn ("This program is not capable of handling ",
 			  "this input data.\n",
@@ -247,7 +257,8 @@ sub copy_input () {
 	}
     }
 
-    print STDERR ("Patch kit apparently okay.\n") if $verbose;
+    print STDERR ($applypatch == 3 ? "Apply" : "",
+		  "Patch kit apparently okay.\n") if $verbose;
 
     # Reset file to start of patch data.
     $tmpfile->setpos ($pos);
@@ -308,7 +319,6 @@ sub verify_files () {
 	    warn ("Apparently this is not the expected source directory, ",
 		  "aborting.\n");
 	    die ("Use \"--force\" to override this.\n");
-	    
 	}
     }
 
@@ -351,13 +361,16 @@ sub execute_patch () {
     my $p = new IO::File;
     print STDERR ("+ $patch\n") if $trace;
     $p->open("|$patch") || die ("Cannot open pipe to \"$patch\": $!\n");
-
     if ( $applypatch ) {
+	my $lines = 0;
 	while ( <$tmpfile> ) {
 	    chomp;
+	    $lines++;
+	    print STDERR ("++ ", $_, "\n") if $debug;
 	    print $p ($_, "\n");
 	    last if $_ eq "#### End of Patch data ####";
 	}
+	print STDERR ("+ $lines lines sent to \"$patch\"\n") if $trace;
     }
     else {
 	print $p ($_) while <$tmpfile>;
@@ -371,8 +384,10 @@ sub set_utime ($$;$) {
     chmod (0777, $fn)
       || warn ("WARNING: Cannot utime/chmod a+rwx $fn: $!\n");
     print STDERR ("+ utime $fn $mtime (".localtime($mtime).")\n") if $trace;
+    # Set times. Ignore errors for directories since some systems
+    # (like MSWin32) do not allow directories to be stamped.
     utime ($mtime, $mtime, $fn)
-      || warn ("WARNING: utime($mtime,$fn): $!\n");
+      || -d $fn || warn ("WARNING: utime($mtime,$fn): $!\n");
     printf STDERR ("+ chmod 0%o $fn\n", $mode) if $trace;
     chmod ($mode, $fn)
       || warn sprintf ("WARNING: Cannot utime/chmod 0%o $fn: $!\n", $mode);
@@ -454,13 +469,14 @@ sub app_options () {
     # Make sure defaults are set before returning!
     return unless @ARGV > 0;
     my @opts = ('check'		=> \$check,
-		'dir=s'		=> \$dir,
+		'dir|d=s'	=> \$dir,
 		'retain'	=> \$retain,
 		'force'		=> \$force,
 		'verbose'	=> \$verbose,
 		'quiet'		=> sub { $verbose = 0; },
 		'patch=s'	=> \$patch,
 		'trace'		=> \$trace,
+		'debug'		=> \$debug,
 		'help'		=> \$help);
     
     (!GetOptions (@opts) || $help) && app_usage (2);

@@ -29,13 +29,13 @@ $Config{'startperl'}
 !GROK!THIS!
 print OUT <<'!NO!SUBS!';
 # makepatch.pl -- generate a patch kit from two files or directories.
-my $RCS_Id = '$Id: makepatch.pl,v 1.109 1998-11-23 22:39:45+01 jv Exp $ ';
+my $RCS_Id = '$Id: makepatch.pl,v 1.114 1998-12-04 11:07:16+01 jv Exp $ ';
 # Author          : Johan Vromans
 # Created On      : Tue Jul  7 20:39:39 1992
 # Last Modified By: Johan Vromans
-# Last Modified On: Mon Nov 23 22:22:53 1998
-# Update Count    : 951
-# Status          : Experimental
+# Last Modified On: Fri Dec  4 11:06:04 1998
+# Update Count    : 1057
+# Status          : Released
 #
 
 use strict;
@@ -52,7 +52,7 @@ use File::Spec;
 
 my $my_package = 'Sciurix';
 my $my_name    = "makepatch";
-my $my_version = "1.99";
+my $my_version = "2.00";
 my $data_version = '1.0';
 
 $my_version .= '*' if length('$Locker:  $ ') > 12;
@@ -97,6 +97,8 @@ my $nul = "/dev/null";		# NLA0:
 my $timestamp = "".localtime();	# timestamp, in string format
 my $nulpat = quotemeta ($nul);	# pattern to match nul
 my $unified = 0;		# produce unified diff
+my $skipped = 0;		# number of files skipped.
+my $excluded = 0;		# number of files excluded.
 
 ## Subroutine prototypes
 
@@ -105,12 +107,12 @@ sub app_parse_rc ($$$);
 sub app_usage ();
 sub app_usage_filelist ();
 sub catfile ($$);
-sub check_extract ($$);
+sub check_extract ($);
 sub cleanup ();
 sub debug   (@);
 sub dodiff ($$$$);
 sub makepatch ();
-sub extract ($$$);
+sub extract ($$);
 sub filelist ($);
 sub generate_perl ($);
 sub generate_shell ($);
@@ -153,13 +155,24 @@ my $patch    = new IO::File;
 $SIG{INT} = \&cleanup;
 $SIG{QUIT} = \&cleanup;
 
-# The original (given) names for the source trees.
-my ($orig_old, $orig_new) = @ARGV;
+# The arguments.
+my %fields = ( tag   => 1,	# old/new
+	       name  => 2,	# given name on command line
+	       root  => 3,	# real (physical) directory
+	       base  => 4,	# basename (for archives)
+	       man   => 5,	# name of manifest
+	       manfn => 6,	# same, real file name
+	       files => 7,	# list of files
+	     );
+my $old = [ \%fields, "old", shift(@ARGV) ];
+my $new = [ \%fields, "new", shift(@ARGV) ];
+#my $old = { tag => "old", name => shift(@ARGV) };
+#my $new = { tag => "new", name => shift(@ARGV) };
 
 # Unpack archives, if applicable.
-# $old and $new now are the real locations for the source trees.
-my $old = check_extract ($orig_old, "old");
-my $new = check_extract ($orig_new, "new");
+# $old->{root} and $new->{root} are the real locations for the source trees.
+check_extract ($old);
+check_extract ($new);
 
 # The process.
 makepatch ();
@@ -182,42 +195,43 @@ sub makepatch () {
     # This will bail out if the directory could not be created.
     $patch->open(">$thepatch") || die ("$thepatch: $!\n");
 
-    if ( -f $old && -f $new ) {
+    if ( -f $old->{root} && -f $new->{root} ) {
 	# Two files.
-	verbose ("Old file = $orig_old.\n", "New file = $orig_new.\n");
-	dodiff ($dot, $new, $dot, $old) &&
-	  push (@workq, [ 'p', $old, -s $old, (stat($new))[9], (stat(_))[2] ]);
+	verbose ("Old file = $old->{root}.\n", "New file = $new->{root}.\n");
+	dodiff ($dot, $new->{root}, $dot, $old->{root}) &&
+	  push (@workq, [ 'p', $old->{root}, -s $old->{root},
+			  (stat($new))[9], (stat(_))[2] ]);
     }
-    elsif ( -f $old && -d $new ) {
+    elsif ( -f $old->{root} && -d $new->{root} ) {
 	# File and dir -> File and dir/File.
-	my $fn = catfile ($new, $old);
-        verbose ("Old file = $orig_old.\n", "New file = $fn.\n");
-	if ( -f $fn ) {
-	    dodiff ($new, $old, $dot, $old) &&
-	      push (@workq, [ 'p', $old, -s $old, 
-			      (stat($fn))[9], (stat(_))[2] ]);
+	$new->{root} = $new->{base} = catfile ($new->{root}, $old->{root});
+        verbose ("Old file = $old->{root}.\n", "New file = $new->{root}.\n");
+	if ( -f $new->{root} ) {
+	    dodiff ($dot, $new->{root}, $dot, $old->{root}) &&
+	      push (@workq, [ 'p', $old->{root}, -s $old->{root},
+			      (stat($new->{root}))[9], (stat(_))[2] ]);
 	}
 	else {
-	    newfile ($new, $old) &&
-	      push (@workq, [ 'c', $fn, 0, (stat($fn))[9], (stat(_))[2] ]);
+	    unshift (@workq, [ 'r', $old->{root}, -s $old->{root}, 0 ]);
 	}
     }
-    elsif ( -f $new && -d $old ) {
-	my $fn = catfile ($old, $new);
-	verbose ("Old file = $fn.\n", "New file = $orig_new.\n");
-	if ( -f $new ) {
-	    dodiff ($dot, $new, $old, $new) &&
-	      push (@workq, [ 'p', $fn, -s $fn, 
-			      (stat($new))[9], (stat(_))[2] ]);
+    elsif ( -d $old->{root} && -f $new->{root} ) {
+	# Dir and file -> Dir/file and file.
+	$old->{root} = $old->{base} = catfile ($old->{root}, $new->{root});
+        verbose ("Old file = $old->{root}.\n", "New file = $new->{root}.\n");
+	if ( -f $old->{root} ) {
+	    dodiff ($dot, $new->{root}, $dot, $old->{root}) &&
+	      push (@workq, [ 'p', $old->{root}, -s $old->{root},
+			      (stat($new->{root}))[9], (stat(_))[2] ]);
 	}
 	else {
-	    unshift (@workq, [ 'r', $fn, -s $fn, 0 ]);
+	    newfile ($new->{root}, $old->{root}) &&
+	      push (@workq, [ 'c', $old->{root}, 0,
+			      (stat($new->{root}))[9], (stat(_))[2] ]);
 	}
     }
-    else {
-	# Should be two directories.
-	my (@old, @new);
-
+    elsif ( -d $old->{root} && -d $new->{root} ) {
+	# Two directories.
 	if ( $opt_nomanifest ) {
 	    verbose ("Not using MANIFEST files.\n");
 	    undef $opt_oldmanifest;
@@ -225,119 +239,120 @@ sub makepatch () {
 	}
 	elsif ( defined $opt_automanifest &&
 		!(defined $opt_oldmanifest || defined $opt_newmanifest) &&
-		 (-s catfile($old, $opt_automanifest) &&
-		  -s catfile($new, $opt_automanifest)) ) {
+		 (-s catfile($old->{root}, $opt_automanifest) &&
+		  -s catfile($new->{root}, $opt_automanifest)) ) {
 	    verbose ("Using standard $opt_automanifest files.\n");
-	    $opt_oldmanifest = catfile($old,$opt_automanifest);
-	    $opt_newmanifest = catfile($new,$opt_automanifest);
-	}
-
-	if ( defined $opt_oldmanifest ) {
-	    @old = make_filelist_from_manifest ($opt_oldmanifest);
-	    my $t = $orig_old eq $dot ? "current directory" :
-	      $orig_old eq $dotdot ? "parent directory" : $orig_old;
-	    message ("Manifest $opt_oldmanifest for $t contains ",
-		     scalar(@old), " file", @old == 1 ? "" : "s", ".\n");
+	    $opt_oldmanifest = catfile($old->{root},$opt_automanifest);
+	    $opt_newmanifest = catfile($new->{root},$opt_automanifest);
+	    $new->{man} = $old->{man} = $opt_automanifest;
+	    $old->{manfn} = $opt_oldmanifest;
+	    $new->{manfn} = $opt_newmanifest;
 	}
 	else {
-	    my $t = $orig_old eq $dot ? "current directory" :
-	      $orig_old eq $dotdot ? "parent directory" :
-		"directory $orig_old";
-	    message ("Building file list for $t ...\n");
-	    @old = make_filelist ($old);
-	    message (ucfirst($t)." contains ",
-		     scalar(@old), " file", @old == 1 ? "" : "s", ".\n");
+	    $old->{man} = $old->{manfn} = $opt_oldmanifest;
+	    $new->{man} = $new->{manfn} = $opt_newmanifest;
 	}
 
-	if ( defined $opt_newmanifest ) {
-	    @new = make_filelist_from_manifest ($opt_newmanifest);
-	    my $t = $orig_new eq $dot ? "current directory" :
-	      $orig_new eq $dotdot ? "parent directory" : $orig_new;
-	    message ("Manifest $opt_newmanifest for $t contains ",
-		     scalar(@new), " file", @new == 1 ? "" : "s", ".\n");
-	}
-	else {
-	    my $t = $orig_new eq $dot ? "current directory" :
-	      $orig_new eq $dotdot ? "parent directory" :
-		"directory $orig_new";
-	    message ("Building file list for $t ...\n");
-	    @new = make_filelist ($new);
-	    message (ucfirst($t) . " contains ",
-		     scalar(@new), " file", @new == 1 ? "" : "s", ".\n");
+	for ( $old, $new ) {
+	    if ( defined ($_->{manfn}) ) {
+		my $t = $_->{name} eq $dot ? "current directory" :
+		  $_->{name} eq $dotdot ? "parent directory" : $_->{base};
+		$_->{files} = [ make_filelist_from_manifest ($_->{manfn}) ];
+		message ("Manifest $_->{man} for $t contains ",
+			 scalar(@{$_->{files}}), " file", 
+			 scalar(@{$_->{files}}) == 1 ? "" : "s", ".\n");
+	    }
+	    else {
+		my $t = $_->{name} eq $dot ? "current directory" :
+		  $_->{name} eq $dotdot ? "parent directory" :
+		    "directory $_->{base}";
+		message ("Building file list for $t ...\n");
+		$_->{files} = [ make_filelist ($_->{root}) ];
+		message (ucfirst($t)." contains ",
+			 scalar(@{$_->{files}}), " file",
+			 scalar(@{$_->{files}}) == 1 ? "" : "s", ".\n");
+	    }
 	}
 
 	# Handle patchlevel file first.
-	$opt_patchlevel = (grep (/patchlevel\.h/, @new))[0]
+	$opt_patchlevel = (grep (/patchlevel\.h/, @{$new->{files}}))[0]
 	    unless defined $opt_patchlevel;
 
 	if ( defined $opt_patchlevel && $opt_patchlevel ne "" ) {
-	    my $oldpl = catfile ($old, $opt_patchlevel);
-	    my $newpl = catfile ($new, $opt_patchlevel);
+	    my $oldpl = catfile ($old->{root}, $opt_patchlevel);
+	    my $newpl = catfile ($new->{root}, $opt_patchlevel);
 	    if ( ! -f $newpl ) {
 		die ("$newpl: $!\n");
 	    }
 	    if ( -f $oldpl ) {
-		push (@workq, [ dodiff ($new, $opt_patchlevel, 
-					$old, $opt_patchlevel) ? 'p' : 'v',
+		push (@workq, [ dodiff ($new->{root}, $opt_patchlevel,
+					$old->{root}, $opt_patchlevel) ? 'p' : 'v',
 				$opt_patchlevel,
 				-s $oldpl,
 				(stat($newpl))[9], (stat(_))[2] ]);
+		# Remove patchlevel.h from the list of old files.
+		$old->{files} = [ grep ($_ ne $opt_patchlevel, @{$old->{files}}) ];
 	    }
 	    else {
-		newfile ($new, $opt_patchlevel) &&
-		  push (@workq, [ 'c', $opt_patchlevel, 0, 
+		newfile ($new->{root}, $opt_patchlevel) &&
+		  push (@workq, [ 'c', $opt_patchlevel, 0,
 				  (stat($newpl))[9], (stat(_))[2] ]);
 	    }
+	    # Remove patchlevel.h from the list of new files.
+	    $new->{files} = [ grep ($_ ne $opt_patchlevel, @{$new->{files}}) ];
 	}
 	else {
 	    undef $opt_patchlevel;
 	}
-        
+
         my $o;
         my $n;
 
-	# Process the filelists.
-	while ( @old + @new > 0 || defined $o || defined $n ) {
+	message ("Processing the filelists ...\n");
+	while ( scalar(@{$old->{files}}) + scalar(@{$new->{files}}) > 0
+		|| defined $o || defined $n ) {
 
-	    $o = shift (@old) unless defined $o;
-	    $n = shift (@new) unless defined $n;
-	    
+	    $o = shift (@{$old->{files}}) unless defined $o;
+	    $n = shift (@{$new->{files}}) unless defined $n;
+
+	    debug ("* ", $o || "(undef)", " <-> ", $n || "(undef)", " ",
+		   "* $old->{files}->[0] <-> $new->{files}->[0]\n");
 	    if ( defined $n && (!defined $o || $o gt $n) ) {
 		# New file.
-		if ( defined $opt_patchlevel && $n eq $opt_patchlevel ) {
-		    undef $opt_patchlevel;
-		}
-		else {
-		    newfile ($new, $n) &&
-		      push (@workq, [ 'c', $n, 0, (stat(catfile($new,$n)))[9],
-				      (stat(_))[2] ]);
-                }
+		debug ("*> New file: $n\n");
+		newfile ($new->{root}, $n) &&
+		  push (@workq, [ 'c', $n, 0,
+				  (stat(catfile($new->{root},$n)))[9],
+				  (stat(_))[2] ]);
 		undef $n;
 	    }
 	    elsif ( !defined $n || $o lt $n ) {
 		# Obsolete (removed) file.
-		unshift (@workq, [ 'r', $o, -s catfile($old,$o), 0 ]);
+		debug ("*> Obsolete: $o\n");
+		unshift (@workq, [ 'r', $o, -s catfile($old->{root},$o), 0 ]);
 		undef $o;
 	    }
 	    elsif ( $o eq $n ) {
 		# Same file.
-		if ( defined $opt_patchlevel && $n eq $opt_patchlevel ) {
-		    undef $opt_patchlevel;
-		}
-		else {
-		    dodiff ($new, $n, $old, $o) &&
-		      push (@workq, [ 'p', $o, -s catfile($old,$o),
-				      (stat(catfile($new,$n)))[9],
-				      (stat(_))[2] ]);
-		}
+		debug ("*> Compare: $n\n");
+		dodiff ($new->{root}, $n, $old->{root}, $o) &&
+		  push (@workq, [ 'p', $o, -s catfile($old->{root},$o),
+				  (stat(catfile($new->{root},$n)))[9],
+				  (stat(_))[2] ]);
 		undef $n;
 		undef $o;
 	    }
 	}
     }
+    else {
+	app_usage ();
+    }
 
     $patch->close;
 
+    # For the sake of memory usage...
+    undef $old->{files};
+    undef $new->{files};
 }
 
 sub cleanup () {
@@ -356,7 +371,7 @@ sub setup_excludes () {
 	foreach $pat ( @opt_exclude ) {
 	    my @a = split (/(\[[^\]]+\]|[*.?])/, $pat);
 	    push (@opt_exclude_regex,
-		  join ('', 
+		  join ('',
 			'(\A|/)',
 			(map { ($_ eq '*' ? '.*' :
 				($_ eq '?' ? '.' :
@@ -395,7 +410,7 @@ sub make_filelist ($;$) {
     my $dh = new IO::File;
     trace ("+ recurse $dir\n");
     opendir ($dh, $dir) || die ("$dir: $!\n");
-    my @tmp = sort (readdir ($dh));
+    my @tmp = readdir ($dh);
     closedir ($dh);
     debug ("Dir $dir: ", scalar(@tmp), " entries\n");
 
@@ -406,13 +421,14 @@ sub make_filelist ($;$) {
 	# Skip unwanted files.
 	next if $file =~ /^\.\.?$/; # dot and dotdot
 	next if $file =~ /~$/;	# editor backup files
-        
+
         my $realname = catfile ($dir, $file);
         my $display_name = defined $disp ? catfile($disp,$file) : $file;
 
         # Skip exclusions.
         if ( defined $exclude_pat && $display_name =~ /$exclude_pat/mso ) {
           verbose ("Excluding $display_name\n");
+	  $excluded++;
           next;
         }
 
@@ -426,9 +442,11 @@ sub make_filelist ($;$) {
 	    push (@ret, $display_name);
 	}
 	else {
-	    warn ("Ignored $realname: not a file\n");
+	    verbose ("WARNING: Not a file: $realname -- skipped\n");
+	    $skipped++;
 	}
     }
+    @ret = sort @ret if $opt_sort;
     @ret;
 }
 
@@ -439,6 +457,7 @@ sub make_filelist_from_manifest ($) {
     my ($man) = @_;
     my $fh = new IO::File;
     my @ret = ();
+    local ($_);
 
     $fh->open($man) || die ("$man: $!\n");
     while ( <$fh> ) {
@@ -452,13 +471,17 @@ sub make_filelist_from_manifest ($) {
 	push (@ret, $_);
     }
     $fh->close;
-    @ret = grep ($_ !~ /$exclude_pat/mso, @ret) if defined $exclude_pat;
+    if ( defined $exclude_pat ) {
+	my $t = @ret;
+	@ret = grep ($_ !~ /$exclude_pat/mso, @ret);
+	$excluded += $t - @ret;
+    }
     @ret = sort @ret if $opt_sort;
     @ret;
 }
 
-sub check_extract ($$) {
-    my ($arg, $tag) = @_;
+sub check_extract ($) {
+    my ($arg) = @_;
 
     my @exctrl = ('.+\.(tar\.gz|tgz)' => "gzip -d | tar xpf -",
 		  '.+\.(tar\.bz2)'    => "bzip2 -d | tar xpf -",
@@ -475,32 +498,33 @@ sub check_extract ($$) {
 	}
     }
 
-    $arg = File::Spec->canonpath ($arg);
-    my $base = basename ($arg);
+    $arg->{root} = File::Spec->canonpath ($arg->{name});
+    my $base = basename ($arg->{root});
 
     while ( @exctrl > 0 ) {
 	my $pat = shift (@exctrl);
 	my $cmd = shift (@exctrl);
 	if ( $base =~ /^$pat$/is ) {
-	    my $newkit = extract ($arg, $cmd, $tag);
-	    verbose ("Using $newkit for $arg\n");
-	    return $newkit;
+	    extract ($arg, $cmd);
+	    verbose ("Using $arg->{root} for $arg->{name}\n")
+	      unless $arg->{root} eq $arg->{name};
+	    return;
 	}
     }
-    return $arg;
+    $arg->{root} = $arg->{base} = $arg->{name};
 }
 
-sub extract ($$$) {
-    my ($kit, $cmd, $root) = @_;
+sub extract ($$) {
+    my ($arg, $cmd) = @_;
 
-    my $tmp = catfile ($tmpdir, $root);
-    verbose ("Extracting $kit to $tmp...\n");
+    my $tmp = catfile ($tmpdir, $arg->{tag});
+    message ("Extracting $arg->{name} to $tmp...\n");
 
     # Create a temp directory.
     mkdir ($tmp, 0777) || die ("Cannot mkdir $tmp [$!]\n");
 
     # Extract the kit.
-    $cmd = "( cd $tmp; $cmd ) < $kit";
+    $cmd = "( cd $tmp; $cmd ) < $arg->{name}";
     trace ("+ $cmd\n");
     my $ret = system ("$cmd 1>&2");
     exit (1) if $ret || ($? & 127);
@@ -513,10 +537,13 @@ sub extract ($$$) {
 
     # If we have only one directory, assume it is the root.
     if ( @files == 1 && -d catfile($tmp,$files[0]) ) {
-	return catfile($tmp,$files[0]);
+	$arg->{base} = $files[0];
+	$arg->{root} = catfile($tmp,$files[0]);
+	return;
     }
     # Else, take the temp dir as root.
-    return $tmp;
+    $arg->{root} = $tmp;
+    $arg->{base} = $arg->{name};
 }
 
 sub catfile ($$) {
@@ -531,11 +558,13 @@ sub dodiff ($$$$) {
 
     # Check for binary files.
     if ( -B $oldfn ) {
-	warn ("WARNING: Binary file $oldfn -- skipped\n");
+	verbose ("WARNING: Binary file $oldfn -- skipped\n");
+	$skipped++;
 	return 0;
     }
     if ( -B $newfn ) {
-	warn ("WARNING: Binary file $newfn -- skipped\n");
+	verbose ("WARNING: Binary file $newfn -- skipped\n");
+	$skipped++;
 	return 0;
     }
 
@@ -547,7 +576,7 @@ sub dodiff ($$$$) {
     debug  (sprintf ("+> result = 0x%x\n", $result)) if $result;
 
     if ( $result && $result < 128 ) {
-	wrapup (($result == 2 || $result == 3) 
+	wrapup (($result == 2 || $result == 3)
 		? "User request" : "System error");
 	exit (1);
     }
@@ -584,7 +613,7 @@ sub dodiff ($$$$) {
 
     # Copy patch.
     $fh->open($tmpfile) || die ("$tmpfile: $!\n");
-    
+
     # Skip to beginning of patch. Adjust $unified if needed.
     my $found = 0;
     while ( <$fh> ) {
@@ -639,10 +668,12 @@ sub newfile ($$) {
     my $lines = 0;
     unless ( $fh->open($newfn) ) {
 	warn ("$newfn: $!\n");
+	$skipped++;
 	return 0;
     }
     if ( -B $fh ) {
-	warn ("WARNING: Binary file $new -- skipped\n");
+	verbose ("WARNING: Binary file $new -- skipped\n");
+	$skipped++;
 	return 0;
     }
     my $pos = $fh->getpos;
@@ -662,6 +693,9 @@ sub newfile ($$) {
 	$cmd =~ s/\003P/$newfn/eg;
 	print $patch (`$cmd`);
     }
+
+    # Prepending $dot, so we can use 'path -p0' as well as 'patch -p1'.
+    $new = File::Spec->catfile($dot,$new);
 
     print $patch ("Index: $new\n");
 
@@ -715,22 +749,6 @@ sub quotfn ($) {
     "'$file'";
 }
 
-sub yesno ($) {
-    $_[0] ? "Yes" : "No";
-}
-
-sub showopts ($) {
-    my ($fh) = @_;
-    my @opt_exclude_regex = ("(none)") unless @opt_exclude_regex;
-
-    print $fh
-      ("# Date generated      : $timestamp\n",
-       "# Generated by        : $my_name $my_version\n",
-       "# Recurse directories : ", yesno ($opt_recurse), "\n",
-       "# Excluded files      : ", 
-       join("\n#                       ", @opt_exclude_regex), "\n");
-}
-
 sub wrapup (;$) {
     my ($reason) = @_;
 
@@ -739,16 +757,15 @@ sub wrapup (;$) {
 	return;
     }
 
+    warn ("WARNING: $skipped file",
+	  $skipped == 1 ? " was" : "s were", " skipped!",
+	  $opt_verbose ? "" : " Use \"--verbose\" for more details.",
+	  "\n") if $skipped;
+
     # Construct a description, if possible.
     if ( @opt_descr == 0 ) {
-	my $old = $old;
-	# Reduce to root if extracted.
-	$old = basename($old)
-	  if File::Spec->catdir($tmpdir,"old") eq dirname($old);
-	my $new = $new;
-	# Reduce to root if extracted.
-	$new = basename($new)
-	  if File::Spec->catdir($tmpdir,"new") eq dirname($new);
+	my $old = $old->{base};
+	my $new = $new->{base};
 	# We can infer a name if the file name does not contain a
 	# directory part, and is not equal to . or ..
 	if ( $old ne $dot && $old ne $dotdot && basename($old) eq $old &&
@@ -772,8 +789,7 @@ sub wrapup (;$) {
     }
     push (@opt_descr, "");
 
-    verbose ("Collecting patches... ");
-    print STDOUT ("\n") if $opt_verbose && -t STDOUT;
+    message ("Collecting patches ...\n");
 
     my $removed = 0;		# files removed
     my $created = 0;		# files added
@@ -800,7 +816,7 @@ sub wrapup (;$) {
 	    foreach my $i ( (1-@p)..0 ) {
 		my $dir = join('/',@p[0..-$i]);
 		unless ( defined $dir_gone{$dir} ) {
-		    unless ( -d catfile($new,$dir) ) {
+		    unless ( -d catfile($new->{root},$dir) ) {
 			$dremoved++;
 			$dir_gone{$dir} = 1;
 		    }
@@ -812,7 +828,7 @@ sub wrapup (;$) {
 	}
 	foreach ( sort @newcomers ) {
 	    # Explicitly create the new files since not all patch versions
-	    # can handle creating new files. 
+	    # can handle creating new files.
 	    # Create intermediate directories first.
 	    # WARNING: This code assumes you are running some Unix.
 	    my @p = split (/\//, $_);
@@ -820,9 +836,10 @@ sub wrapup (;$) {
 	    foreach my $i ( 0..(@p-1) ) {
 		my $dir = join('/',@p[0..$i]);
 		unless ( defined $dir_ok{$dir} ) {
-		    unless ( -d catfile($old,$dir) ) {
-			push (@workq, [ 'C', $dir, 0, 0, 
-					(stat(catfile($new,$dir)))[2] ]);
+		    unless ( -d catfile($old->{root},$dir) ) {
+			push (@workq, [ 'C', $dir, 0,
+					(stat(catfile($new->{root},$dir)))[9],
+					(stat(_))[2] ]);
 			$dcreated++;
 		    }
 		    $dir_ok{$dir} = 1;
@@ -842,7 +859,7 @@ sub wrapup (;$) {
 # STEP 1: Chdir to the source directory.
 # STEP 2: Run the 'applypatch' program with this patch file as input.
 #
-# If you do not have 'applypatch', it is part of the 'makepatch' package 
+# If you do not have 'applypatch', it is part of the 'makepatch' package
 # that you can fetch from the Comprehensive Perl Archive Network:
 # http://www.perl.com/CPAN/authors/Johan_Vromans/makepatch-x.y.tar.gz
 # In the above URL, 'x' should be 2 or higher.
@@ -924,10 +941,15 @@ EOD
 
     # Print a reassuring "End of Patch" note so people won't
     # wonder if their mailer truncated patches.
-    print $fh ("#### End of Patch data ####\n\n");
-    print $fh ("#### ApplyPatch data follows ####\n");
-    print $fh ("# Data version        : $data_version\n");
-    showopts ($fh);
+    print $fh ("#### End of Patch data ####\n\n",
+	       "#### ApplyPatch data follows ####\n",
+	       "# Data version        : $data_version\n",
+	       "# Date generated      : $timestamp\n",
+	       "# Generated by        : $my_name $my_version\n");
+    print $fh ("# Recurse directories : Yes\n") if $opt_recurse;
+    print $fh ("# Excluded files      : ",
+	       join("\n#                       ", @opt_exclude_regex), "\n")
+      if @opt_exclude_regex;
 
     foreach ( @workq ) {
 	my ($op, $file, @args) = @$_;
@@ -960,26 +982,24 @@ EOD
     $fh->close;
     print STDOUT ("#### Checksum: $lines $bytes $sum ####\n");
 
-    # return unless $opt_verbose;
-
-    verbose ("Collecting patches... ") if -t STDOUT;
-    verbose ("done.\n");
     message ("  $patched file",
 	     $patched == 1 ? "" : "s", " need to be patched.\n");
     if ( $created ) {
 	message ("  $created file", $created == 1 ? "" : "s");
-	message (" and $dcreated director", 
+	message (" and $dcreated director",
 		 $dcreated == 1 ? "y" : "ies") if $dcreated;
 	message (" need", ($created+$dcreated != 1) ? "" : "s",
 		 " to be created.\n");
     }
     if ( $removed ) {
 	message ("  $removed file", $removed == 1 ? "" : "s");
-	message (" and $dremoved director", 
+	message (" and $dremoved director",
 		 $dremoved == 1 ? "y" : "ies") if $dremoved;
 	message (" need", ($removed+$dremoved != 1) ? "" : "s",
 		 " to be removed.\n");
     }
+    message ("  $excluded file",
+	  $skipped == 1 ? " was" : "s were", " excluded.\n") if $excluded;
 }
 
 sub filelist ($) {
@@ -1001,7 +1021,7 @@ sub app_options () {
 	     "automanifest=s"		=> \$opt_automanifest,
 	     "debug!"			=> \$opt_debug,
 	     "description=s@"		=> \@opt_descr,
-	     "diff=s"			=> \$opt_diff, 
+	     "diff=s"			=> \$opt_diff,
 	     "exclude-regex=s@"     	=> \@opt_exclude_regex,
 	     "exclude-vc!"		=> \$opt_exclude_vc,
 	     "exclude=s@"	     	=> \@opt_exclude,
@@ -1041,12 +1061,14 @@ sub app_options () {
     }
 
     # Process ini file options.
+    # First, try system wide file. Unix specific.
+    app_parse_rc ("/etc/makepatchrc", 1, \@o);
     my $rcname = ".".$my_name."rc";
-    # First, try HOME .rc.
+    # Then, try HOME .rc.
     app_parse_rc (catfile ($ENV{HOME}, $rcname), 1, \@o);
     # Then try --rcfile, defaulting to .rc in current dir.
     if ( defined $opt_rcfile ) {
-	app_parse_rc (catfile ($ENV{HOME}, $rcname), 0, \@o);
+	app_parse_rc ($opt_rcfile, 0, \@o);
     }
     else {
 	app_parse_rc (catfile ($dot, $rcname), 1, \@o);
@@ -1118,13 +1140,15 @@ sub app_options () {
     }
 
     # Exclude options.
-    unshift (@opt_exclude_regex, 
+    unshift (@opt_exclude_regex,
 	     '(\A|.*/)CVS(/.*|\Z)',
 	     '(\A|.*/)RCS(/.*|\Z)', ',v\Z',
 	     '(\A|.*/)SCCS(/.*|\Z)', '(\A|.*/)[sp]\..+\Z',
 	    ) if $opt_exclude_vc;
 
     $opt_verbose = 0 if $opt_quiet;
+    $opt_trace ||= $opt_debug;
+    $opt_verbose ||= $opt_trace;
 }
 
 sub app_parse_rc ($$$) {
@@ -1344,6 +1368,20 @@ and feed the script to B<applypatch>:
 B<applypatch> will verify that it is executing in the right place and
 make all neccessary updates.
 
+By default, B<makepatch> will provide a few lines of progress
+information, for example:
+
+    Extracting pkg-1.6.tar.gz to /tmp/mp21575.d/old...
+    Manifest MANIFEST for pkg-1.6 contains 1083 files.
+    Manifest MANIFEST for pkg-1.7 contains 1292 files.
+    Processing the filelists ...
+    Collecting patches ...
+      266 files need to be patched.
+      216 files and 8 directories need to be created.
+      7 files need to be removed.
+
+B<applypatch> will provide no feedback information by default.
+
 =head1 Makepatch arguments
 
 B<makepatch> requires two arguments: I<old_src> and I<new_src>.
@@ -1451,18 +1489,22 @@ B<-rcfile> can be used to specify an alternate option file, see below.
 
 Options files.
 
-B<makepatch> first tries to process a file named B<.makepatchrc> in
-the user's home directory.
+B<makepatch> first tries to process a file named B</etc/makepatchrc>.
+(This is a Unix-ism.)
+It is okay if this file is missing.
 
-Empty lines and lines starting with C<;> or C<#> are ignored. All
-other lines are considered to contain options exactly as if they had
-been supplied on the command line.
+Next, B<makepatch> will process a file named B<.makepatchrc> in
+the user's home directory, if it exists.
 
-After processing this file, B<makepatch> tries to process a file named
-B<.makepatchrc> in the current directory. An alternative filename can
-be specified with option B<-rcfile> in environment variable
-B<MAKEPATCHINIT>. This is the only way to specify an alternative
-options file name.
+After processing this file, B<makepatch> will process a file named
+B<.makepatchrc> in the current directory, if it exists. An alternative
+name for this file can be specified with option B<-rcfile> in
+environment variable B<MAKEPATCHINIT>. This is the only way to specify
+an alternative options file name.
+
+In all option files, empty lines and lines starting with C<;> or C<#>
+are ignored. All other lines are considered to contain options exactly
+as if they had been supplied on the command line.
 
 =item *
 
@@ -1591,7 +1633,7 @@ set to the location where the files must be extracted. Multiple
 B<-extract> options may be supplied. User defined rules override
 built-in rules.
 
-Built-in rules are:
+Builtin rules are:
 
     .+\.(tar\.gz|tgz)    => "gzip -d | tar xpf -"
     .+\.(tar\.bz2)       => "bzip2 -d | tar xpf -"
@@ -1722,8 +1764,18 @@ string:
 
 =head1 Bugs and restrictions
 
+Much of the job of B<makepatch> is processing file names. B<makepatch>
+has been tested extensively on Unix systems, but it is not guaranteed
+to work on other systems.
+
+B<applypatch> is repeatedly reported to correctly process B<makepatch>
+generated patch kits on modern 32-bit Windows systems as well.
+
 B<makepatch> does not know about symbolic links.
 These will be treated like plain files.
+
+Wrong results can be generated if the file lists that are used or
+generated use different path separators.
 
 =head1 SEE ALSO
 
@@ -1738,7 +1790,7 @@ B<rm>(1).
 Johan Vromans (jvromans@squirrel.nl) wrote the program, with a little
 help and inspiration from: Jeffery Small, Ulrich Pfeifer, Nigel
 Metheringham, Julian Yip, Tim Bunce, Gurusamy Sarathy, Hugo van der
-Sanden, Rob Browning, and others.
+Sanden, Rob Browning, Joshua Pritikin, and others.
 
 =head1 COPYRIGHT AND DISCLAIMER
 
