@@ -7,8 +7,9 @@ It resembles "diff -c -r -N", but:
   - it handles 'patchlevel.h' first;
   - it supplies 'Index:' and 'Prereq:' lines;
   - it can use 'manifest' files;
-  - it generates shell commands to remove files;
+  - it generates shell commands to create and remove files and directories;
   - it can manipulate manifest files.
+  - it can exclude files using wildcard and regex patters.
 
 As distributed, it assumes that perl resides in /usr/local/bin. You
 have to change the first line of makepatch.pl if your perl is in a
@@ -23,8 +24,8 @@ To install:
     blib/script/makepatch is the makepatch program
     blib/man1/makepatch.1 is the manual page
 
-  - Optionally, as root, type 'make install' to install the program
-    and the documentation on your system.
+  - Type 'make install' to install the program and the documentation
+    on your system. This usually requires super user privileges.
 
 --------------------------------------------------------------------------
 Johan Vromans                                         jvromans@squirrel.nl
