@@ -1,11 +1,11 @@
 #!/usr/bin/perl -w
 # makepatch.pl -- generate a patch kit from two files or directories.
-my $RCS_Id = '$Id: makepatch.pl,v 1.127 2001-04-08 10:59:47+02 jv Exp jv $ ';
+my $RCS_Id = '$Id: makepatch.pl,v 1.132 2003-12-08 23:12:08+01 jv Exp jv $ ';
 # Author          : Johan Vromans
 # Created On      : Tue Jul  7 20:39:39 1992
 # Last Modified By: Johan Vromans
-# Last Modified On: Thu Nov 22 10:00:12 2001
-# Update Count    : 1168
+# Last Modified On: Wed Mar 24 19:34:58 2004
+# Update Count    : 1176
 # Status          : Released
 #
 
@@ -20,7 +20,7 @@ use File::Path;
 
 my $my_package = 'Sciurix';
 my $my_name    = "makepatch";
-my $my_version = "2.00_07";
+my $my_version = "2.00_11";
 my $data_version = '1.0';
 
 $my_version .= '*' if length('$Locker: jv $ ') > 12;
@@ -142,7 +142,7 @@ if ( $opt_exclude_standard ) {
 setup_excludes ();
 
 if ( $opt_ignore_rcs_keywords ) {
-    # Note: We ignore $Log$ since that wouldn't work anyway.
+    # Note: We ignore 'Log' since that wouldn't work anyway.
     $opt_diff .= ' ' .
       q{'--ignore-matching-lines=\\$\\(} .
 	join('\\|', qw(Author Date Header Id Locker Name RCSfile
@@ -226,13 +226,14 @@ sub makepatch () {
 
     # This will bail out if the directory could not be created.
     $patch->open(">$thepatch") || die ("$thepatch: $!\n");
+    binmode($patch);
 
     if ( -f $old->{root} && -f $new->{root} ) {
 	# Two files.
 	verbose ("Old file = $old->{root}.\n", "New file = $new->{root}.\n");
 	dodiff ($dot, $new->{root}, $dot, $old->{root}) &&
 	  push (@workq, [ 'p', $old->{root}, -s $old->{root},
-			  (stat($new))[9], (stat(_))[2] ]);
+			  (stat($new->{root}))[9], (stat(_))[2] ]);
     }
     elsif ( -f $old->{root} && -d $new->{root} ) {
 	# File and dir -> File and dir/File.
@@ -551,6 +552,7 @@ sub make_filelist_from_manifest ($) {
     local ($_);
 
     $fh->open($man) || die ("$man: $!\n");
+    binmode($fh);
     while ( <$fh> ) {
 	if ( $. == 2 && /^[-=_\s]*$/ ) {
 	    @ret = ();
@@ -645,6 +647,7 @@ sub catfile ($$) {
 }
 
 sub dot_file_u ($) {
+   $_[0] =~ s,\\,/,g if $^O eq 'MSWin32';
    File::Spec::Unix->catfile($dot_u, File::Spec::Unix->canonpath(@_));
 }
 
@@ -712,6 +715,7 @@ sub dodiff ($$$$) {
 
     # Copy patch.
     $fh->open($tmpfile) || die ("$tmpfile: $!\n");
+    binmode($fh);
 
     # Skip to beginning of patch. Adjust $unified if needed.
     my $found = 0;
@@ -770,6 +774,7 @@ sub newfile ($$) {
 	$skipped++;
 	return 0;
     }
+    binmode($fh);
     # We cannot trust stdio here.
     if ( -s $newfn && -B _ ) {
 	verbose ("WARNING: Binary file $new -- skipped\n");
@@ -801,7 +806,7 @@ sub newfile ($$) {
     }
 
     # Prepending $dot, so we can use 'patch -p0' as well as 'patch -p1'.
-    $new = File::Spec->catfile($dot,$new);
+    $new = dot_file_u($new);
 
     print $patch ("Index: $new\n");
 
@@ -956,6 +961,7 @@ sub wrapup (;$) {
 
     my $fh = new IO::File;
     $fh->open(">$tmpfile") || die ("$tmpfile: $!\n");
+    binmode($fh);
 
     foreach ( @opt_descr ) {
 	print $fh ("# ", $_, "\n");
@@ -1040,6 +1046,7 @@ EOD
 EOD
     # Copy patch.
     $patch->open($thepatch);
+    binmode($patch);
     while ( <$patch> ) {
 	print $fh $_;
     }
@@ -1082,6 +1089,7 @@ EOD
     my $all_bytes = 0;
     my $all_sum = 0;
     $fh->open ($tmpfile) || die ("$tmpfile: $!\n");
+    binmode($fh);
     while ( <$fh> ) {
 	$lines = $bytes = $sum = 0
 	  if /^#### Patch data follows ####/;

@@ -3,6 +3,11 @@ Changes in 2.01
 
 General
 
+ * Used IO::File instead of IO.
+
+ * Use binmode for all files, to prevent unicode problems with newer
+   perls. 
+
  * Modified a few things that required Perl 5.005, so it now runs
    under 5.004.
 
