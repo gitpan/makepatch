@@ -1,11 +1,11 @@
 #!/usr/bin/perl -w
 # applypatch -- apply a 'makepatch' generated patch kit.
-my $RCS_Id = '$Id: applypatch.pl,v 1.14 1999-10-04 20:18:59+02 jv Exp $ ';
+my $RCS_Id = '$Id: applypatch.pl,v 1.17 2001-04-08 11:00:00+02 jv Exp $ ';
 # Author          : Johan Vromans
 # Created On      : Sat Nov 14 14:34:28 1998
 # Last Modified By: Johan Vromans
-# Last Modified On: Mon Oct  4 20:13:08 1999
-# Update Count    : 130
+# Last Modified On: Sun Apr  8 10:59:56 2001
+# Update Count    : 133
 # Status          : Released
 #
 
@@ -22,7 +22,7 @@ use Text::ParseWords;
 
 my $my_package = 'Sciurix';
 my $my_name    = "applypatch";
-my $my_version = "2.00_03";
+my $my_version = "2.00_05";
 my $data_version = '1.0';
 
 $my_version .= '*' if length('$Locker:  $ ') > 12;
@@ -518,7 +518,7 @@ sub app_usage ($) {
 Usage: $0 [options] patch-kit
 
     -help		this message
-    -dir		change to this directory before executing
+    -dir XXX		change to this directory before executing
     -check              check, but does not execute
     -retain		retain .orig file after patching
     -force              continue after verification failures
