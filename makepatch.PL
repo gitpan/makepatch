@@ -29,12 +29,12 @@ $Config{'startperl'}
 !GROK!THIS!
 print OUT <<'!NO!SUBS!';
 # makepatch.pl -- generate batch of patches.
-my $RCS_Id = '$Id: makepatch.pl,v 1.90 1998-09-11 13:13:45+02 jv Exp $ ';
+my $RCS_Id = '$Id: makepatch.pl,v 1.91 1998-09-13 12:54:34+02 jv Exp $ ';
 # Author          : Johan Vromans
 # Created On      : Tue Jul  7 20:39:39 1992
 # Last Modified By: Johan Vromans
-# Last Modified On: Fri Sep 11 13:10:29 1998
-# Update Count    : 304
+# Last Modified On: Sun Sep 13 12:46:57 1998
+# Update Count    : 315
 # Status          : Experimental
 #
 # Generate a patch kit from two files or directories.
@@ -729,36 +729,50 @@ B<makepatch> B<-filelist> [ I<options> ] I<manifest>
 B<Makepatch> generates a set of differences between two files or two
 sets of files maintained in two different directories and prints the
 results to I<stdout>.  This resulting output is suitable for use by
-the B<patch>(1) program to update copies of the target file(s) from
+the B<patch>(1) program to update copies of the target file from
 the I<old> to the I<new> version.
 
 Features of this utility include:
 
-=item - Recursive descend through sub-directories.
+=over 4
 
-=item - Generation of commands to remove obsolete files.
+=item *
 
-=item - Automatic handling of the I<patchlevel.h> file first.
+Recursive descend through sub-directories.
 
-=item - Automatic inclusion of I<Index:> and I<Prereq:> lines.
+=item *
 
-=item - Ability to utilize specified I<manifest> file(s).
+Generation of commands to remove obsolete files.
+
+=item *
+
+Automatic handling of the I<patchlevel.h> file first.
+
+=item *
+
+Automatic inclusion of I<Index:> and I<Prereq:> lines.
+
+=item *
+
+Ability to utilize specified I<manifest> files.
+
+=back
 
 =head1 ARGUMENTS
 
-=over
+=over 4
 
 =item I<old>
 
 This is the name of either a single file or else a directory which
-contains copies of the older version of the target file(s); in
-other words, copies of the file(s) I<prior> to any modifications.
+contains copies of the older version of the target files; in
+other words, copies of the files I<prior> to any modifications.
 
 =item I<new>
 
 This is the name of either a single file or else a directory which
-contains copies of the newer version of the target file(s); in other
-words, copies of the file(s) I<after> the modifications have been
+contains copies of the newer version of the target files; in other
+words, copies of the files I<after> the modifications have been
 made.  A B<rm>(1) command will automatically be generated for every
 I<old> file that no longer has a corresponding I<new> version.
 
@@ -766,7 +780,7 @@ I<old> file that no longer has a corresponding I<new> version.
 
 =head1 MAKEPATCH OPTIONS
 
-=over
+=over 4
 
 =item B<-diff> I<cmd>
 
@@ -919,15 +933,21 @@ program immediately exits.
 Although there is no formal standard for manifest files, the following
 rules apply:
 
-=over 2
+=over 4
 
-=item - If the second line from the manifest file looks like a separator line
+=item *
+
+If the second line from the manifest file looks like a separator line
 (e.g. it is empty, or contains only dashes), it is discarded and so is
 the first line.
 
-=item - Empty lines and lines that start with a C<#> are ignored.
+=item *
 
-=item - If there are multiple space-separated ``words'' on a line, the first
+Empty lines and lines that start with a C<#> are ignored.
+
+=item *
+
+If there are multiple space-separated ``words'' on a line, the first
 word is considered to be the filename.
 
 =back
@@ -975,8 +995,8 @@ string:
 
 Filenames thet contain single quotes may confuse the process.
 
-B<makepatch> does not know how to handle symbolic links.
-These will be ignored.
+B<makepatch> does not know about symbolic links.
+These will be treated like plain files.
 
 =head1 SEE ALSO
 
