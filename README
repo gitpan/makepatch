@@ -14,12 +14,21 @@ As distributed, it assumes that perl resides in /usr/local/bin. You
 have to change the first line of makepatch.pl if your perl is in a
 different location.
 
-To install: edit the Makefile (if needed) and type 'make install'.
+To install: 
 
-------------------------------------------------------------------------------
-Johan Vromans                                             jvromans@squirrel.nl
-Squirrel Design & Consultancy                         Boskoop, the Netherlands
-http://www.xs4all.nl/~jvromans                   http://www.xxlink.nl/squirrel
-PGP key: finger jvromans@xs4all.nl (Key ID = C9A6FF75)
-         Key fingerprint =  7C F8 BD 5C 25 7F 47 A6  CB 87 32 0B E3 50 EF 04 
------------------------- "Arms are made for hugging" -------------------------
+  - Edit Makefile.PL (if needed)
+  - Type 'perl Makefile.PL'
+  - Type 'make'
+
+    blib/script/makepatch is the makepatch program
+    blib/man1/makepatch.1 is the manual page
+
+  - Optionally, as root, type 'make install' to install the program
+    and the documentation on your system.
+
+--------------------------------------------------------------------------
+Johan Vromans                                         jvromans@squirrel.nl
+Squirrel Consultancy                              Haarlem, the Netherlands
+http://www.squirrel.nl              http://www.squirrel.nl/people/jvromans
+PGP Key 2048/4783B14D KFP=65 44 CA 66 B3 50 0B 34  CE 0E FB CA 2D 95 34 D0
+---------------------- "Arms are made for hugging" -----------------------
