@@ -1,11 +1,11 @@
 #!/usr/bin/perl -w
 # makepatch.pl -- generate a patch kit from two files or directories.
-my $RCS_Id = '$Id: makepatch.pl,v 1.127 2001-04-08 10:59:47+02 jv Exp $ ';
+my $RCS_Id = '$Id: makepatch.pl,v 1.127 2001-04-08 10:59:47+02 jv Exp jv $ ';
 # Author          : Johan Vromans
 # Created On      : Tue Jul  7 20:39:39 1992
 # Last Modified By: Johan Vromans
-# Last Modified On: Sun Apr  8 10:59:33 2001
-# Update Count    : 1101
+# Last Modified On: Wed Nov 21 21:51:16 2001
+# Update Count    : 1144
 # Status          : Released
 #
 
@@ -20,10 +20,10 @@ use File::Path;
 
 my $my_package = 'Sciurix';
 my $my_name    = "makepatch";
-my $my_version = "2.00_05";
+my $my_version = "2.00_06";
 my $data_version = '1.0';
 
-$my_version .= '*' if length('$Locker:  $ ') > 12;
+$my_version .= '*' if length('$Locker: jv $ ') > 12;
 
 ################ Globals ################
 
@@ -78,6 +78,8 @@ sub app_usage_filelist ($);
 sub catfile ($$);
 sub check_extract ($);
 sub cleanup ();
+sub cvs_excludes($$$);
+sub cvs_ignore($);
 sub debug   (@);
 sub dodiff ($$$$);
 sub makepatch ();
@@ -102,6 +104,27 @@ sub yesno ($);
 app_options ();
 
 ################ Presets ################
+
+if ( $opt_exclude_vc ) {
+    # Load common .cvsignore, if present.
+    for ( $ENV{HOME}."/.cvsignore" ) {
+	unshift (@opt_exclude, cvs_ignore($_)) if -s $_;
+    }
+
+    # Standard ignores.
+    # Copied from 'Open Source Development with CVS', p. 170.
+    # Plus some more.
+    unshift (@opt_exclude, '.#*', '#*', ',v', '*,v',
+	     qw(. .. _$* *~ *$ p.* s.*
+		*.a *.bak *.BAK *.elc *.exe *.gz *.ln *.o *.obj
+		*.olb *.old *.orig *.rej *.so *.Z
+		.del-* .make.state .nse_depinfo core
+		CVS CVS.adm cvslog.*
+		RCS RCSLOG
+		SCCS
+		tags TAGS));
+
+}
 
 setup_excludes ();
 
@@ -352,21 +375,23 @@ sub cleanup () {
     exit (0);
 }
 
+sub shellpat($) {
+    my ($pat) = (@_);
+    my @a = split (/(\[[^\]]+\]|[*.?])/, $pat);
+    join ('',
+	  (map { ($_ eq '*' ? '.*' :
+		  ($_ eq '?' ? '.' :
+		   ($_ eq '.' ? '\.' :
+		    ($_ =~ /^\[/ ? $_ : quotemeta ($_)))))
+	     } @a));
+}
+
 sub setup_excludes () {
     # Add --exclude wildcards to --exclude-regex list.
     if ( @opt_exclude ) {
 	my $pat;
 	foreach $pat ( @opt_exclude ) {
-	    my @a = split (/(\[[^\]]+\]|[*.?])/, $pat);
-	    push (@opt_exclude_regex,
-		  join ('',
-			'(\A|/)',
-			(map { ($_ eq '*' ? '.*' :
-				($_ eq '?' ? '.' :
-				 ($_ eq '.' ? '\.' :
-				  ($_ =~ /^\[/ ? $_ : quotemeta ($_)))))
-			   } @a),
-			'\Z'));
+	    push (@opt_exclude_regex, '(\A|/)'.shellpat($pat).'\Z');
 	}
     }
 
@@ -389,6 +414,56 @@ sub setup_excludes () {
     }
 }
 
+sub cvs_ignore($) {
+    my ($f) = @_;
+    my $fh = do { local *F; *F; };
+    unless ( open($fh, $f) ) {
+	warn("$f: $!\n");
+	return ();
+    }
+    local($/) = undef;
+    my $pat = <$fh>;
+    close($fh);
+
+    $pat =~ s/[\n\r]+/\n/g;
+    $pat =~ s/\s+$//;
+    $pat =~ s/^\s+//;
+    split(/\n/, $pat);
+}
+
+sub cvs_excludes($$$) {
+    my ($f, $dir, $disp) = @_;
+
+    my @list = cvs_ignore($f);
+    return "" unless @list;
+
+    for ( $dir, $disp ) {
+	$_ = "" unless defined $_;
+	$_ .= '/' if $_ && $_ !~ /\/$/;
+	$_ = '\A' . quotemeta($_);
+    }
+
+    my $ret = "";
+    foreach my $pat ( @list ) {
+	my $re = shellpat($pat);
+	debug ("$f: '$pat' -> '$re'\n");
+	eval { '' =~ /$re/ };
+	if ( $@ ) {
+	    $@ =~ s/ at .* line.*$//;
+	    warn("$f: invalid pattern '$pat'");
+	    next;
+	}
+	push(@opt_exclude_regex, $dir.$re.'\Z');
+	$ret .= "($re)|";
+    }
+    if ( $ret ) {
+	chop($ret);
+	$ret = '('.$disp.'('.$ret.')\Z)';
+    }
+    debug ("Exclude pattern ($f): $ret\n");
+    $ret;
+}
+
 sub make_filelist ($;$) {
     my ($dir, $disp) = @_;
 
@@ -404,6 +479,11 @@ sub make_filelist ($;$) {
 
     my @ret = ();
     my $file;
+    my $excl = $exclude_pat;
+    for ( catfile($dir, ".cvsignore") ) {
+	$excl = '('.$excl.'|'.cvs_excludes($_,$dir,$disp).')' if -s $_;
+	debug("Exclude pattern: $excl\n");
+    }
     foreach $file ( @tmp ) {
 
 	# Skip unwanted files.
@@ -414,7 +494,7 @@ sub make_filelist ($;$) {
         my $display_name = defined $disp ? catfile($disp,$file) : $file;
 
         # Skip exclusions.
-        if ( defined $exclude_pat && $display_name =~ /$exclude_pat/mso ) {
+        if ( defined $excl && $display_name =~ /$excl/mso ) {
           verbose ("Excluding $display_name\n");
 	  $excluded++;
           next;
@@ -427,6 +507,7 @@ sub make_filelist ($;$) {
 	    push (@ret, make_filelist ($realname, $display_name));
 	}
 	elsif ( -f _ ) {
+	    debug("+ file $display_name\n");
 	    push (@ret, $display_name);
 	}
 	else {
@@ -1036,7 +1117,6 @@ sub filelist ($) {
 sub app_options () {
     my $opt_manifest;
     my $opt_help = 0;
-    my $opt_exclude_vc = 0;
     my $opt_ident = 0;
     my $opt_rcfile;
 
@@ -1164,13 +1244,6 @@ sub app_options () {
 		  "special in the future\n");
 	}
     }
-
-    # Exclude options.
-    unshift (@opt_exclude_regex,
-	     '(\A|.*/)CVS(/.*|\Z)',
-	     '(\A|.*/)RCS(/.*|\Z)', ',v\Z',
-	     '(\A|.*/)SCCS(/.*|\Z)', '(\A|.*/)[sp]\..+\Z',
-	    ) if $opt_exclude_vc;
 
     $opt_verbose = 0 if $opt_quiet;
     $opt_trace ||= $opt_debug;
@@ -1648,14 +1721,7 @@ If set, files and directories that are usually part of version control
 systems are excluded. Supported version control systems are CVS, RCS
 and SCCS.
 
-B<-exclude-vc> is a quick way to enable exclusion by the following
-regular expressions:
-
-	     (\A|.*/)CVS(/.*|\Z)
-	     (\A|.*/)RCS(/.*|\Z)
-             ,v\Z
-	     (\A|.*/)SCCS(/.*|\Z)
-             (\A|.*/)[sp]\..+\Z
+Also, C<.cvsignore> files are honoured just like CVS does it.
 
 =item B<-extract> I<pattern>B<=>I<command>
 
