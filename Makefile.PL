@@ -2,8 +2,8 @@
 # Author          : Ulrich Pfeifer
 # Created On      : Mon Feb 17 10:51:47 1997
 # Last Modified By: Johan Vromans
-# Last Modified On: Thu Nov 22 10:00:34 2001
-# Update Count    : 90
+# Last Modified On: Thu Sep 19 22:49:18 2002
+# Update Count    : 94
 # Status          : Released
 
 # Verify perl version.
@@ -19,7 +19,7 @@ use Config;
 use ExtUtils::MakeMaker;
 
 # WriteMakefile parameter hash.
-my %p = ( NAME => 'makepatch', VERSION => "2.00_08" );
+my %p = ( NAME => 'makepatch', VERSION => "2.00_09" );
 
 # Extra info for newer versions.
 if ( $[ >= 5.005 ) {
@@ -33,14 +33,13 @@ my @scripts = qw (makepatch applypatch);
 my $usrbin = "/usr/bin";
 my $installscript = $Config{installscript};
 
-print STDERR <<EOD unless $installscript eq $usrbin;
+print STDERR ("\n",
+	      "WARNING: This Makefile will install user accessible scripts.\n");
+print STDERR ("The location for these scripts is $installscript.\n")
+  unless $installscript eq $usrbin;
 
-WARNING: This Makefile will install user accessible scripts.
-The location for these scripts is $installscript.
-You may consider to pass INSTALLSCRIPT=$usrbin (or some other
-convenient location) to "make install".
-
-EOD
+print STDERR ("You may consider to pass INSTALLSCRIPT=$usrbin (or some other\n",
+	      "convenient location) to \"make install\".\n\n");
 
 if ( $^O eq "solaris" ) {
     print STDERR <<EOD;
