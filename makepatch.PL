@@ -29,12 +29,12 @@ $Config{'startperl'}
 !GROK!THIS!
 print OUT <<'!NO!SUBS!';
 # makepatch.pl -- generate batch of patches.
-$RCS_Id = '$Id: makepatch.pl,v 1.13 1998-03-01 13:10:11+01 jv Exp $ ';
+$RCS_Id = '$Id: makepatch.pl,v 1.14 1998-03-13 10:45:58+01 jv Exp $ ';
 # Author          : Johan Vromans
 # Created On      : Tue Jul  7 20:39:39 1992
 # Last Modified By: Johan Vromans
-# Last Modified On: Sun Mar  1 13:09:27 1998
-# Update Count    : 157
+# Last Modified On: Fri Mar 13 10:45:10 1998
+# Update Count    : 158
 # Status          : Released to USEnet.
 #
 # Generate a patch from two files or directories.
@@ -575,9 +575,12 @@ sub dodiff {
 	print PATCH ("####### $newdir => $ndir\n");
 	while ( <TMP> ) {
 	  s:^\*\*\* /dev/null:*** $newdir$new:;
-	  s:^--- $newdir:--- $ndir/:;
-	  s:^\*\*\* $olddir:*** $ndir/:;
-	    print PATCH;
+	  # As told by Julian Yip <julian@computer.org>.
+	  # Don't do the following substitution 
+	  # if $olddir or $newdir is empty.
+	  s:^--- $newdir:--- $ndir/: if $newdir ne "";
+	  s:^\*\*\* $olddir:*** $ndir/: if $olddir ne "";
+	  print PATCH;
 	}
     }
     close (TMP);
