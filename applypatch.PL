@@ -29,12 +29,12 @@ $Config{'startperl'}
 !GROK!THIS!
 print OUT <<'!NO!SUBS!';
 # applypatch -- apply a 'makepatch' generated patch kit.
-my $RCS_Id = '$Id: applypatch.pl,v 1.10 1998-12-04 10:59:46+01 jv Exp $ ';
+my $RCS_Id = '$Id: applypatch.pl,v 1.11 1998-12-06 18:02:20+01 jv Exp $ ';
 # Author          : Johan Vromans
 # Created On      : Sat Nov 14 14:34:28 1998
 # Last Modified By: Johan Vromans
-# Last Modified On: Fri Dec  4 10:58:43 1998
-# Update Count    : 111
+# Last Modified On: Sun Dec  6 18:02:17 1998
+# Update Count    : 113
 # Status          : Released
 #
 
@@ -57,7 +57,6 @@ my $my_version = "2.00";
 my $data_version = '1.0';
 
 $my_version .= '*' if length('$Locker:  $ ') > 12;
-$my_version .= " (2.0BETA)";
 
 ################ Globals ################
 

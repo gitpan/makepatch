@@ -29,12 +29,12 @@ $Config{'startperl'}
 !GROK!THIS!
 print OUT <<'!NO!SUBS!';
 # makepatch.pl -- generate a patch kit from two files or directories.
-my $RCS_Id = '$Id: makepatch.pl,v 1.114 1998-12-04 11:07:16+01 jv Exp $ ';
+my $RCS_Id = '$Id: makepatch.pl,v 1.115 1998-12-06 18:02:32+01 jv Exp $ ';
 # Author          : Johan Vromans
 # Created On      : Tue Jul  7 20:39:39 1992
 # Last Modified By: Johan Vromans
-# Last Modified On: Fri Dec  4 11:06:04 1998
-# Update Count    : 1057
+# Last Modified On: Sun Dec  6 18:02:29 1998
+# Update Count    : 1059
 # Status          : Released
 #
 
@@ -56,7 +56,6 @@ my $my_version = "2.00";
 my $data_version = '1.0';
 
 $my_version .= '*' if length('$Locker:  $ ') > 12;
-$my_version .= " (2.0BETA)";
 
 ################ Globals ################
 

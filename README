@@ -1,5 +1,3 @@
-WARNING: THIS IS BETA SOFTWARE --- PROCEED AT YOUR OWN RISK
-
 This is the makepatch package, containing a pair of programs to assist
 in the generation and application of patch kits to synchronise source
 trees.
