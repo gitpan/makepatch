@@ -1,0 +1,211 @@
+.TH MAKEPATCH 1 "93/09/11" "Version 1.8"
+.SH NAME
+makepatch \- create patch diffs between two versions of source
+.SH SYNOPSIS
+.B makepatch
+.RI [ options ]
+.I old new
+.PP
+.B makepatch
+\-filelist
+.RI [ options ] 
+.I manifest
+
+.SH DESCRIPTION
+.I Makepatch
+generates a set of differences between two files or two sets of files
+maintained in two different directories and prints the results to
+\fIstdout\fP.
+This resulting output is suitable for use by the 
+.IR patch (1)
+program to update copies of the target file(s) from the \fIold\fP
+to the \fInew\fP version.
+.LP
+Features of this utility include:
+.na
+.TP 3n
+\- 
+Recursive descend through sub-directories.
+.TP 3n
+\- 
+Generation of commands to remove obsolete files.
+.TP 3n
+\- 
+Automatic handling of the \fIpatchlevel.h\fP file first.
+.TP 3n
+\- 
+Automatic inclusion of \fIIndex:\fP and \fIPrereq:\fP lines.
+.TP 3n
+\- 
+Ability to utilize specified \fImanifest\fP file(s).
+.ad
+
+.SH ARGUMENTS
+.TP 6
+.I old
+This is the name of either a single file or else a directory which
+contains copies of the older version of the target file(s); in
+other words, copies of the file(s) \fIprior\fP to any modifications.
+.TP 
+.I new
+This is the name of either a single file or else a directory which
+contains copies of the newer version of the target file(s); in
+other words, copies of the file(s) \fIafter\fP the modifications have
+been made.
+A 
+.IR rm (1)
+command will automatically be generated for every
+\fIold\fP file that no longer has a corresponding \fInew\fP version.
+
+.SH "MAKEPATCH OPTIONS"
+.TP 6
+\fB\-diff\fP \fIcmd\fP
+If specified, \fIcmd\fP is the command to be used to generate the
+differences between the two versions of the files.
+If not specified, this command defaults to "\fBdiff \-c\fP".
+.TP 6
+\fB\-patchlevel\fP \fIpfile\fP
+If specified, \fIpfile\fP indicates an alternate file that is to be
+used in lieu of "\fBpatchlevel.h\fP".
+.TP 6
+\fB\-man\fP[\fBifest\fP] \fImfile\fP
+If specified, \fImfile\fP indicates the name of the manifest file
+which consists of a list of the files contained in both the \fIold\fP
+and the \fInew\fP directories.
+.TP 6
+\fB\-oldman\fP[\fBifest\fP] \fIomfile\fP
+If specified, \fIomfile\fP indicates the name of the manifest file
+which consists of a list of the files contained in the \fIold\fP
+directory.
+This option is designed to be used in conjunction with the
+\%\fB-newmanifest\fP option.
+Note that the \fIold\fP and \fInew\fP directories must still be
+indicated.
+.TP 6
+\fB\-newman\fP[\fBifest\fP] \fInmfile\fP
+If specified, \fInmfile\fP indicates the name of the manifest file
+which consists of a list of the files contained in the \fInew\fP
+directory.
+This option is designed to be used in conjunction with the
+\%\fB-oldmanifest\fP option.
+Note that the \fIold\fP and \fInew\fP directories must still be
+indicated.
+.TP 6
+\fB\-follow\fP
+If specified, symbolic links to directories are traversed as if they
+were real directories.
+
+.SH "FILELIST OPTIONS"
+.TP 6
+.BR \- [ file ] list 
+This option instructs 
+.I makepatch
+to read a manifest file, and output the list of files included in
+this manifest. This option is useful to turn the contents of a
+manifest file into a list of files suitable for other programs.
+.TP 6
+\fB\-man\fP[\fBifest\fP] \fImfile\fP
+If specified, \fImfile\fP indicates the name of the manifest file to
+be used. Alternatively, the name of the manifest file may follow the
+command line options.
+.TP 6
+.B \-prefix 
+.I string
+Every entry in the manifest file is prefixed with
+.I string
+before it is written to 
+.IR stdout .
+.TP 6
+.B \-nosort
+Retain the order of filenames from the manifest file.
+
+.SH "GENERAL OPTIONS"
+.TP 6
+.B \-verbose
+This is the default mode which displays information
+concerning \fBmakepatch\fP's activity to \fIstderr\fP.
+.TP 6
+.B \-quiet
+The opposite of \fB-verbose\fP.
+This instructs \fImakepatch\fP to suppress the display of
+activity information.
+.TP 6
+.B \-help
+This causes a short help message to be displayed, after which the
+program immediately exits.
+
+.SH "MANIFEST FILES"
+Although there is no formal standard for manifest files, the following
+rules apply:
+.TP 3n
+\-
+If the second line from the manifest file looks like a separator
+line (e.g. it is empty, or contains only dashes), it is discarded and
+so is the first line. 
+.TP 3n
+\-
+Empty lines and lines that start with a 
+.B #
+are ignored.
+.TP 3n
+\-
+If there are multiple space-separated ``words'' on a line, the
+first word is considered to be the filename.
+
+.SH EXAMPLES
+Suppose you have a directory tree 
+.B emacs\-18.58
+containing the sources for GNU Emacs 18.58, and a directory tree
+.B emacs\-18.59
+containing the sources for GNU Emacs 18.59. The following command will
+generate the patch file needed to transform the 18.58 sources into
+18.59: 
+
+.in +3n
+.na
+makepatch emacs\-18.58 emacs\-18.59 > emacs\-18.58\-18.59.diff
+.in
+.ad
+
+This is one way to generate and use manifest files:
+
+.in +3n
+.na
+(cd emacs\-18.58; find . \-type f \-print > MANIFEST)
+.br
+(cd emacs\-18.59; find . \-type f \-print > MANIFEST)
+.br
+makepatch \e
+.in +3n
+\-oldmanifest emacs\-18.58/MANIFEST \e
+.br
+\-newmanifest emacs\-18.59/MANIFEST \e
+.br
+emacs\-18.58 emacs\-18.59 > emacs\-18.58\-18.59.diff
+.in -6n
+.ad
+
+The following example transforms the manifest file into a list of
+files suitable for GNU tar. Note the trailing
+.B /
+in the prefix string:
+
+.na
+.in +3n
+makepatch \-filelist \-prefix emacs\-18.59/ emacs\-18.59/MANIFEST |
+.in +3n
+gtar \-Zcvf emacs\-18.59.tar.Z \-T \-Op
+.in -6n
+.ad
+
+.SH "SEE ALSO"
+.IR diff (1),
+.IR patch (1),
+.IR  perl (1),
+.IR rm (1).
+
+.SH AUTHORS
+Johan Vromans (jv@mh.nl) wrote the program.
+.br
+Jeffery Small (jeff@cjsa.uucp) donated the base version of this manual
+page that inspired me to complete it.

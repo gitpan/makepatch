@@ -1,0 +1,25 @@
+This is makepatch, a program to generate a patch file from two files
+or directories.
+
+It resembles "diff -c -r -N", but:
+
+  - it is always recursive;
+  - it handles 'patchlevel.h' first;
+  - it supplies 'Index:' and 'Prereq:' lines;
+  - it can use 'manifest' files;
+  - it generates shell commands to remove files;
+  - it can manipulate manifest files.
+
+As distributed, it assumes that perl resides in /usr/local/bin. You
+have to change the first line of makepatch.pl if your perl is in a
+different location.
+
+To install: edit the Makefile (if needed) and type 'make install'.
+
+------------------------------------------------------------------------------
+Johan Vromans                                             jvromans@squirrel.nl
+Squirrel Design & Consultancy                         Boskoop, the Netherlands
+http://www.xs4all.nl/~jvromans                   http://www.xxlink.nl/squirrel
+PGP key: finger jvromans@xs4all.nl (Key ID = C9A6FF75)
+         Key fingerprint =  7C F8 BD 5C 25 7F 47 A6  CB 87 32 0B E3 50 EF 04 
+------------------------ "Arms are made for hugging" -------------------------

@@ -1,0 +1,7 @@
+MANIFEST for makepatch 1.8
+
+README		Short description
+MANIFEST	List of files
+Makefile	Simple Makefile to install it
+makepatch.pl	The program
+makepatch.man	The manual page
