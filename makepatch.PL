@@ -29,20 +29,18 @@ $Config{'startperl'}
 !GROK!THIS!
 print OUT <<'!NO!SUBS!';
 # makepatch.pl -- generate batch of patches.
-$RCS_Id = '$Id: makepatch.pl,v 1.14 1998-03-13 10:45:58+01 jv Exp $ ';
+$RCS_Id = '$Id: makepatch.pl,v 1.16 1998-07-07 14:20:48+02 jv Exp $ ';
 # Author          : Johan Vromans
 # Created On      : Tue Jul  7 20:39:39 1992
 # Last Modified By: Johan Vromans
-# Last Modified On: Fri Mar 13 10:45:10 1998
-# Update Count    : 158
+# Last Modified On: Tue Jul  7 14:20:04 1998
+# Update Count    : 184
 # Status          : Released to USEnet.
 #
 # Generate a patch from two files or directories.
 #
 # WARNING: THIS PROGRAM IS NOT '-w' and 'use strict' CLEAN.
 #
-eval 'exec perl  -S $0 "$@"'
-    if 0;
 
 =head1 NAME
 
@@ -595,26 +593,59 @@ sub wrapup {
     if ( $opt_verbose ) {
 	local ($goners) = scalar (@goners);
 	print STDERR ("Collecting: $patched patch",
-		      $patched == 1 ? "" : "es");
-	print STDERR (" ($created new file", 
-		      $created == 1 ? "" : "s", ")") if $created;
-	print STDERR (", $goners goner", 
-		      $goners == 1 ? "" : "s") if $goners;
-	print STDERR (".\n");
+		      $patched == 1 ? "" : "es", "... ");
     }
     if ( @goners or %newcomers ) {
 	print STDOUT "# To apply this patch, chdir to you source ".
           "directory and enter\n#\n";
         print STDOUT "#     /bin/sh <this-file>\n" if (@goners or %newcomers);
-        print STDOUT "#     patch -p1 -n <this-file>\n\n";
+        print STDOUT "#     patch -p1 -N < <this-file>\n\n";
     }
-    foreach ( @goners ) {
-        print STDOUT ("rm -f ", $_, "\n");
+    my $dgoners = 0;
+    {
+	my %dir_gone = ();
+	foreach ( sort @goners ) {
+	    print STDOUT ("rm -f ", $_, "\n");
+	    my @p = split (/\//, $_);
+	    pop (@p);
+	    foreach my $i ( (1-@p)..0 ) {
+		my $dir = join('/',@p[0..-$i]);
+		unless ( defined $dir_gone{$dir} ) {
+		    unless ( -d "$new/$dir" ) {
+			$dgoners++;
+			$dir_gone{$dir} = 1;
+		    }
+		}
+	    }
+	}
+	foreach ( reverse sort keys %dir_gone ) {
+	    print STDOUT ("rmdir ", $_, "\n");
+	}
     }
-    foreach ( keys %newcomers ) {
-	print STDOUT ("touch ", $_, "\n");
-	printf STDOUT "chmod %o %s\n", $newcomers{$_} & 0777, $_
-	  if $newcomers{$_} & 0111; 
+    my $dcreated = 0;
+    {
+	my %dir_ok = ();
+	foreach ( sort keys %newcomers ) {
+	    # Explicitly create the new files since not all patch versions
+	    # can handle creating new files. 
+	    # Create intermediate directories first.
+	    my @p = split (/\//, $_);
+	    pop (@p);
+	    foreach my $i ( 0..(@p-1) ) {
+		my $dir = join('/',@p[0..$i]);
+		unless ( defined $dir_ok{$dir} ) {
+		    unless ( -d "$old/$dir" ) {
+			print STDOUT ("mkdir ", $dir, "\n");
+			$dcreated++;
+		    }
+		    $dir_ok{$dir} = 1;
+		}
+	    }
+	    # Create the file and change the mode if needed.
+	    print STDOUT ("touch ", $_, "\n");
+	    printf STDOUT "chmod %o %s\n", $newcomers{$_} & 0777, $_
+	      if $newcomers{$_} & 0111; 
+	}
     }
     if (@goners or %newcomers) {
         print STDOUT ("exit\n\n");
@@ -624,6 +655,25 @@ sub wrapup {
     open (PATCH, $thepatch);
     print while <PATCH>;
     close (PATCH);
+
+    if ( $opt_verbose ) {
+	local ($goners) = scalar (@goners);
+	print STDERR ("done.\n");
+	if ( $created ) {
+	    print STDERR ("  $created file", 
+			  $created == 1 ? "" : "s");
+	    print STDERR (" and $dcreated director", 
+			  $dcreated == 1 ? "y" : "ies") if $dcreated;
+	    print STDERR (" need to be created.\n");
+	}
+	if ( $goners ) {
+	    print STDERR ("  $goners file", 
+			  $goners == 1 ? "" : "s");
+	    print STDERR (" and $dgoners director", 
+			  $dgoners == 1 ? "y" : "ies") if $dgoners;
+	    print STDERR (" need to be removed.\n");
+	}
+    }
 
     # Cleanup.
     unlink ($tmpfile, $thepatch);
