@@ -1,24 +1,40 @@
 #! perl
 
-print "1..5\n";
+require 5.004;
 
-open (D, ">t/d1/tdata1");
-print D <<EOD;
+if ( $^O eq "solaris" ) {
+    print STDERR <<EOD;
+
+**************** You're running Solaris ****************
+
+The Solaris version of the 'patch' program seems to be extremely buggy.
+If this test fails with a message like
+
+  patch: Line must begin with '+ ', '  ', or '! '.
+
+you must install a better version of 'patch', for example, GNU patch.
+
+**************** Let the games begin ****************
+EOD
+}
+
+print "1..6\n";
+
+my $data1 = <<EOD;
 Squirrel Consultancy
 Duvenvoordestraat 46
 2013 AG  Haarlem
 EOD
-
-close D;
-
-open (D, ">t/d2/tdata1");
-print D <<EOD;
+my $data2 = <<EOD;
 Squirrel Consultancy
 Duivenvoordestraat 46
 2013 AG  Haarlem
 EOD
 
-close D;
+open (D, ">t/d1/tdata1"); print D $data1; close D;
+open (D, ">t/d2/tdata1"); print D $data2; close D;
+open (D, ">t/d1/tdata2"); print D $data2; close D;
+open (D, ">t/d2/tdata2"); print D $data1; close D;
 
 my $tmpout = "basic.out";
 
@@ -26,14 +42,13 @@ $ENV{MAKEPATCHINIT} = "-test";
 @ARGV = qw(-test -quiet -description test t/d1 t/d2);
 
 eval {
+    package MakePatch;
     local (*STDOUT);
     open (STDOUT, ">$tmpout");
     local (*STDERR);
     open (STDERR, ">&STDOUT");
     require "blib/script/makepatch";
 };
-undef *main::app_usage;
-undef *main::app_options;
 
 # Should exit Okay.
 if ( !$@ || $@ =~ /^Okay/ ) {
@@ -46,11 +61,11 @@ else {
 
 # Run makepatch's END block
 eval {
-    cleanup ();
+    MakePatch::cleanup ();
 };
 # And blank it.
-undef *main::cleanup;
-*main::cleanup = sub () {};
+undef &MakePatch::cleanup;
+*MakePatch::cleanup = sub {};
 
 # Expect some output.
 print "not " unless -s $tmpout > 1300;
@@ -61,14 +76,14 @@ my $tmpou2 = "basic.ou2";
 @ARGV = qw(-test -dir t/d1 basic.out);
 
 eval {
+    package ApplyPatch;
     local (*STDOUT);
     open (STDOUT, ">$tmpou2");
     local (*STDERR);
     open (STDERR, ">&STDOUT");
     require "blib/script/applypatch";
 };
-undef *main::app_usage;
-undef *main::app_options;
+# applypatch will chdir to t/d1; change back.
 chdir ("../..");
 
 # Should exit Okay.
@@ -90,6 +105,8 @@ unlink $tmpout, $tmpou2;
 # Verify resultant data.
 print "not " if differ ("t/d1/tdata1", "t/d2/tdata1");
 print "ok 5\n";
+print "not " if differ ("t/d1/tdata1", "t/d2/tdata1");
+print "ok 6\n";
 
 sub differ {
     # Perl version of the 'cmp' program.

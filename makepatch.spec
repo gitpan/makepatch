@@ -1,13 +1,13 @@
 Summary: makepatch -- generate and apply patch kits
 Name: makepatch
-Version: 2.00_01
+Version: 2.00_03
 Release: 1
 Copyright: GPL or Perl Artistic
 Distribution: Free
 Group: Utilities/Text
-Source: ftp://ftp.perl.org/pub/CPAN/authors/id/JV/makepatch-2.00_01.tar.gz
+Source: ftp://ftp.perl.org/pub/CPAN/authors/id/JV/makepatch-2.00_03.tar.gz
 #Patch: 
-Requires: perl >= 5.005
+Requires: perl >= 5.004
 #Prereq: 
 Prefix: /usr/bin
 Packager: Johan Vromans <jvromans@squirrel.nl>

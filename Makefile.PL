@@ -2,12 +2,12 @@
 # Author          : Ulrich Pfeifer
 # Created On      : Mon Feb 17 10:51:47 1997
 # Last Modified By: Johan Vromans
-# Last Modified On: Wed Sep 15 15:25:24 1999
-# Update Count    : 76
+# Last Modified On: Mon Oct  4 20:16:36 1999
+# Update Count    : 85
 # Status          : Released
 
 # Verify perl version.
-require 5.000;
+require 5.004;
 
 # Verify CORE modules.
 use Getopt::Long 2.00;
@@ -18,7 +18,7 @@ use File::Spec;
 use ExtUtils::MakeMaker;
 
 # WriteMakefile parameter hash.
-my %p = ( NAME => 'makepatch', VERSION => "2.00_02" );
+my %p = ( NAME => 'makepatch', VERSION => "2.00_03" );
 
 # Extra info for newer versions.
 if ( $[ >= 5.005 ) {
@@ -28,6 +28,32 @@ if ( $[ >= 5.005 ) {
 
 # Scripts.
 my @scripts = qw (makepatch applypatch);
+
+if ( $^O eq "solaris" ) {
+    print STDERR <<EOD;
+
+I see you're running Solaris.
+The Solaris version of the 'patch' program is extremely buggy.
+If the 'make test' command fails with a message
+
+  patch: Line must begin with '+ ', '  ', or '! '.
+
+you must install a better version of 'patch', for example, GNU patch.
+
+EOD
+}
+
+my $TMPDIR = $ENV{"TMPDIR"} || $ENV{TEMP} || "/usr/tmp";
+unless ( -d $TMPDIR && -w $TMPDIR ) {
+print STDERR <<EOD;
+The default location for temporary files ($TMPDIR) does not
+exist, or is not accessible.
+You must use environment variable TMPDIR or TEMP to designate a writable
+directory to hold temporary files.
+EOD
+    die ("Cannot continue\n");
+}
+
 
 =ignore
 
@@ -69,7 +95,9 @@ foreach ( sort keys %req ) {
 
 # Append scripts and modules to WriteMakefile args.
 $p{EXE_FILES} = [ map { "script/$_" } @scripts ];
-$p{PM}->{"lib/$_"} = '${INST_LIBDIR}'."/$_" foreach @mods;
+foreach ( @mods ) {
+    $p{PM}->{"lib/$_"} = '${INST_LIBDIR}'."/$_";
+}
 
 # Write the Makefile.
 WriteMakefile (%p);

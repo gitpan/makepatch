@@ -1,14 +1,27 @@
 Changes in 2.01
 ---------------
 
-Calculate separate checksums for the patch data and the whole patch
-file. Do not complain if the checksum for the patch file is wrong, if
-the checksum for the patch data is okay. 
+General
 
-This allows modification of the preamble of the patch file without
-affecting the integrity checking mechanism.
+ * Modified a few things that required Perl 5.005, so it now runs
+   under 5.004.
 
-Restructured the files in the kit, and added a test program.
+ * Calculate separate checksums for the patch data and the whole patch
+   file. Do not complain if the checksum for the patch file is wrong,
+   if the checksum for the patch data is okay.
+   This allows modification of the preamble of the patch file without
+   affecting the integrity checking mechanism.
+
+ * Restructured the files in the kit, and added a test program.
+
+ * A warning is given when installing on Solaris, since the 'patch'
+   program on Solaris (at least the versions I have access to) is
+   buggy to the extent that it is unusable.
+
+Makepatch
+
+ * Some systems need to set environment variable TMPDIR (or TEMP) to
+   designate a location for temporary files.
 
 Overall changes in makepatch version 2.0
 ----------------------------------------
