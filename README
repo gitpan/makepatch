@@ -7,13 +7,12 @@ It resembles "diff -c -r -N", but:
   - it handles 'patchlevel.h' first;
   - it supplies 'Index:' and 'Prereq:' lines;
   - it can use 'manifest' files;
-  - it generates shell commands to create and remove files and directories;
+  - it generates commands to create and remove files and directories;
+  - it can generate a perl program to apply the patches;
   - it can manipulate manifest files.
   - it can exclude files using wildcard and regex patters.
 
-As distributed, it assumes that perl resides in /usr/local/bin. You
-have to change the first line of makepatch.pl if your perl is in a
-different location.
+And lots more. Please consult the documentation for all details.
 
 To install: 
 
