@@ -8,7 +8,7 @@ the checksum for the patch data is okay.
 This allows modification of the preamble of the patch file without
 affecting the integrity checking mechanism.
 
-A test program in now included with the kit.
+Restructured the files in the kit, and added a test program.
 
 Overall changes in makepatch version 2.0
 ----------------------------------------

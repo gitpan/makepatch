@@ -1,11 +1,11 @@
 #!/usr/bin/perl -w
 # makepatch.pl -- generate a patch kit from two files or directories.
-my $RCS_Id = '$Id: makepatch.pl,v 1.116 1999-09-03 13:08:19+02 jv Exp $ ';
+my $RCS_Id = '$Id: makepatch.pl,v 1.118 1999-09-15 15:34:52+02 jv Exp $ ';
 # Author          : Johan Vromans
 # Created On      : Tue Jul  7 20:39:39 1992
 # Last Modified By: Johan Vromans
-# Last Modified On: Fri Sep  3 13:06:49 1999
-# Update Count    : 1081
+# Last Modified On: Wed Sep 15 15:31:57 1999
+# Update Count    : 1086
 # Status          : Released
 #
 
@@ -23,7 +23,7 @@ use File::Spec;
 
 my $my_package = 'Sciurix';
 my $my_name    = "makepatch";
-my $my_version = "2.00_01";
+my $my_version = "2.00_02";
 my $data_version = '1.0';
 
 $my_version .= '*' if length('$Locker:  $ ') > 12;
@@ -118,7 +118,7 @@ if ( $opt_filelist ) {
 
 # Create temp dir and names for temp files.
 my $tmpdir   = File::Spec->catdir ($TMPDIR, "mp$$.d");
-mkdir ($tmpdir, 0777) unless -d $tmpdir;
+mkdir ($tmpdir, 0777) or die ("tmpdir: $!\n");
 my $thepatch = catfile ($tmpdir, ".mp$$.p");
 my $tmpfile  = catfile ($tmpdir, ".mp$$.t");
 my $patch    = new IO::File;
@@ -128,18 +128,24 @@ $SIG{INT} = \&cleanup;
 $SIG{QUIT} = \&cleanup;
 
 # The arguments.
-my %fields = ( tag   => 1,	# old/new
-	       name  => 2,	# given name on command line
-	       root  => 3,	# real (physical) directory
-	       base  => 4,	# basename (for archives)
-	       man   => 5,	# name of manifest
-	       manfn => 6,	# same, real file name
-	       files => 7,	# list of files
-	     );
-my $old = [ \%fields, "old", shift(@ARGV) ];
-my $new = [ \%fields, "new", shift(@ARGV) ];
-#my $old = { tag => "old", name => shift(@ARGV) };
-#my $new = { tag => "new", name => shift(@ARGV) };
+my ($old, $new);
+if ( $] >= 5.005 ) {
+    # Use pseudo-hashes if possible.
+    my %fields = ( tag   => 1,	# old/new
+		   name  => 2,	# given name on command line
+		   root  => 3,	# real (physical) directory
+		   base  => 4,	# basename (for archives)
+		   man   => 5,	# name of manifest
+		   manfn => 6,	# same, real file name
+		   files => 7,	# list of files
+		 );
+    $old = [ \%fields, "old", shift(@ARGV) ];
+    $new = [ \%fields, "new", shift(@ARGV) ];
+}
+else {
+    $old = { tag => "old", name => shift(@ARGV) };
+    $new = { tag => "new", name => shift(@ARGV) };
+}
 
 # Unpack archives, if applicable.
 # $old->{root} and $new->{root} are the real locations for the source trees.
@@ -535,12 +541,12 @@ sub dodiff ($$$$) {
     my $newfn = catfile ($newdir, $new);
 
     # Check for binary files.
-    if ( -B $oldfn ) {
+    if ( -s $oldfn && -B _ ) {
 	verbose ("WARNING: Binary file $oldfn -- skipped\n");
 	$skipped++;
 	return 0;
     }
-    if ( -B $newfn ) {
+    if ( -s $newfn && -B _ ) {
 	verbose ("WARNING: Binary file $newfn -- skipped\n");
 	$skipped++;
 	return 0;
@@ -650,7 +656,8 @@ sub newfile ($$) {
 	$skipped++;
 	return 0;
     }
-    if ( -B $fh ) {
+    # We cannot trust stdio here.
+    if ( -s $newfn && -B _ ) {
 	verbose ("WARNING: Binary file $new -- skipped\n");
 	$skipped++;
 	return 0;
