@@ -2,8 +2,8 @@
 # Author          : Ulrich Pfeifer
 # Created On      : Mon Feb 17 10:51:47 1997
 # Last Modified By: Johan Vromans
-# Last Modified On: Thu Mar 25 17:00:45 2004
-# Update Count    : 97
+# Last Modified On: Thu Sep 28 14:56:39 2006
+# Update Count    : 101
 # Status          : Released
 
 # Verify perl version.
@@ -11,7 +11,7 @@ require 5.004;
 
 # Verify CORE modules.
 use Getopt::Long 2.00;
-use IO;
+use IO qw(File);
 use File::Basename;
 use File::Spec;
 use Config;
@@ -19,7 +19,7 @@ use Config;
 use ExtUtils::MakeMaker;
 
 # WriteMakefile parameter hash.
-my %p = ( NAME => 'makepatch', VERSION => "2.00_12" );
+my %p = ( NAME => 'makepatch', VERSION => "2.01" );
 
 # Extra info for newer versions.
 if ( $[ >= 5.005 ) {

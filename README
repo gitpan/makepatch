@@ -2,8 +2,6 @@ This is the makepatch package, containing a pair of programs to assist
 in the generation and application of patch kits to synchronise source
 trees.
 
-NOTE: This is version 2.00_11, which is a pre-release of 2.01.
-
 INTRODUCTION
 
 Traditionally, source trees are updated with the 'patch' program,

@@ -1,17 +1,19 @@
 Summary: makepatch -- generate and apply patch kits
 Name: makepatch
-Version: 2.00_03
+Version: 2.01
 Release: 1
-Copyright: GPL or Perl Artistic
+License: GPL or Perl Artistic
 Distribution: Free
 Group: Utilities/Text
-Source: ftp://ftp.perl.org/pub/CPAN/authors/id/JV/makepatch-2.00_03.tar.gz
+Source: ftp://ftp.perl.org/pub/CPAN/authors/id/JV/%{name}-%{version}.tar.gz
 #Patch: 
 Requires: perl >= 5.004
 #Prereq: 
 Prefix: /usr/bin
 Packager: Johan Vromans <jvromans@squirrel.nl>
 Vendor: Squirrel Consultancy, Haarlem, The Netherlands
+BuildArch: noarch
+BuildRoot: /var/tmp/makepatch-buildroot
 
 %description
 This is the makepatch package, containing a pair of programs to assist
@@ -62,36 +64,24 @@ Note that 'applypatch' only requires the 'patch' program. It does not
 rely on a shell or shell tools. This makes it possible to apply
 patches on non-Unix systems.
 
-%ifarch noarch
-
 %prep
 %setup
 #%patch -p0 -b .opt
 
 %build
 perl Makefile.PL
-make all 
+make all
+make test
 
 %install
-make install
-eval `perl -V:installscript`
-if [ ! "$installscript" = "/usr/bin" ]; then
-    rm -f /usr/bin/makepatch /usr/bin/applypatch
-    mv $installscript/makepatch /usr/bin/makepatch
-    mv $installscript/applypatch /usr/bin/applypatch
-fi
-eval `perl -V:installman1dir`
-if [ ! "$installman1dir" = "/usr/man/man1" ]; then
-    rm -f /usr/man/man1/makepatch.1 /usr/man/man1/applypatch.1
-    mv $installman1dir/makepatch /usr/man/man1/makepatch
-    mv $installman1dir/applypatch /usr/man/man1/applypatch
-fi
+mkdir -p $RPM_BUILD_ROOT%{_bindir}
+mkdir -p $RPM_BUILD_ROOT%{_mandir}/man1
+install blib/script/makepatch $RPM_BUILD_ROOT%{_bindir}
+install blib/script/applypatch $RPM_BUILD_ROOT%{_bindir}
+install -m 0444 blib/man1/* $RPM_BUILD_ROOT%{_mandir}/man1
 
 %files
 %doc README CHANGES
-/usr/bin/applypatch
-/usr/bin/makepatch
-/usr/man/man1/applypatch.1
-/usr/man/man1/makepatch.1
+%{_bindir}/*
+%{_mandir}/man1/*
 
-%endif

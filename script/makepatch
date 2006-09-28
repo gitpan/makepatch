@@ -1,17 +1,17 @@
 #!/usr/bin/perl -w
 # makepatch.pl -- generate a patch kit from two files or directories.
-my $RCS_Id = '$Id: makepatch.pl,v 1.132 2003-12-08 23:12:08+01 jv Exp jv $ ';
 # Author          : Johan Vromans
 # Created On      : Tue Jul  7 20:39:39 1992
 # Last Modified By: Johan Vromans
-# Last Modified On: Thu Mar 25 16:54:58 2004
-# Update Count    : 1177
+# Last Modified On: Thu Sep 28 15:00:57 2006
+# Update Count    : 1185
 # Status          : Released
 #
+my $RCS_Id = '$Id: makepatch.pl,v 1.133 2006/09/28 13:01:39 jv Exp $ ';
 
 use strict;
 use Getopt::Long 2.00;
-use IO;
+use IO qw(File);
 use File::Basename;
 use File::Spec;
 use File::Path;
@@ -20,10 +20,10 @@ use File::Path;
 
 my $my_package = 'Sciurix';
 my $my_name    = "makepatch";
-my $my_version = "2.00_12";
+my $my_version = "2.01";
 my $data_version = '1.0';
 
-$my_version .= '*' if length('$Locker: jv $ ') > 12;
+$my_version .= '*' if length('$Locker:  $ ') > 12;
 
 ################ Globals ################
 
@@ -62,7 +62,7 @@ my $opt_test = 0;		# testing
 
 my $exclude_pat;		# regex to exclude
 my @workq = ();			# pre/post work
-my $TMPDIR = $ENV{"TMPDIR"} || $ENV{TEMP} || "/usr/tmp";
+my $TMPDIR = $ENV{TMPDIR} || $ENV{TEMP} || File::Spec->tmpdir || "/usr/tmp";
 my $dot_u = File::Spec::Unix->curdir; # UNIX current dir
 my $dot = File::Spec->curdir;	# current dir
 my $dotdot = File::Spec->updir;	# parent dir
@@ -181,7 +181,7 @@ $SIG{QUIT} = \&cleanup;
 
 # The arguments.
 my ($old, $new);
-if ( $] >= 5.005 ) {
+if ( $] >= 5.005 && $] < 5.008 ) {
     # Use pseudo-hashes if possible.
     my %fields = ( tag   => 1,	# old/new
 		   name  => 2,	# given name on command line
@@ -1405,6 +1405,7 @@ EoU
 1;
 
 __END__
+
 ################ Documentation ################
 
 =head1 NAME
@@ -2007,7 +2008,7 @@ Sanden, Rob Browning, Joshua Pritikin, and others.
 
 =head1 COPYRIGHT AND DISCLAIMER
 
-This program is Copyright 1992,1999 by Squirrel Consultancy. All
+This program is Copyright 1992,2004,2006 by Squirrel Consultancy. All
 rights reserved.
 
 This program is free software; you can redistribute it and/or modify

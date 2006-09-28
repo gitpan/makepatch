@@ -96,18 +96,14 @@ else {
 }
 
 # Expect no output.
-# However, a common cause of failures here is a stupid warning from
-# an ancient version of Getopt::Long.
-my $s = -s $tmpou2;
-if ( $s > 0 ) {
-    open (FX, $tmpou2) or die ("$tmpou2: $!\n");
-    local $/;
-    my $c = <FX>;
-    close (FX);
-    if ($c =~ m/Argument \"2\.24_\d+\" isn\'t numeric/){
-	warn ("WARNING: Please upgrade Getopt::Long to 2.25 or higher");
-    }
-    else {
+# print "not " if -s $tmpou2 > 0;
+{
+    my $s;
+    if ( ($s = -s $tmpou2) > 0 ) {
+	open (FX, $tmpou2) or die ("$tmpou2: $!\n");
+	local $/;
+	my $c = <FX>;
+	close (FX);
 	$c =~ s/^/####/gm;
 	$c .= "####";
 	print ("# tmpou2[$tmpou2]s[$s]c[$c]\nnot ");
