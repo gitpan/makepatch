@@ -1,6 +1,6 @@
 Summary: makepatch -- generate and apply patch kits
 Name: makepatch
-Version: 2.01
+Version: 2.02
 Release: 1
 License: GPL or Perl Artistic
 Distribution: Free

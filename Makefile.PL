@@ -2,8 +2,8 @@
 # Author          : Ulrich Pfeifer
 # Created On      : Mon Feb 17 10:51:47 1997
 # Last Modified By: Johan Vromans
-# Last Modified On: Thu Sep 28 14:56:39 2006
-# Update Count    : 101
+# Last Modified On: Fri Sep 29 11:16:17 2006
+# Update Count    : 104
 # Status          : Released
 
 # Verify perl version.
@@ -19,7 +19,7 @@ use Config;
 use ExtUtils::MakeMaker;
 
 # WriteMakefile parameter hash.
-my %p = ( NAME => 'makepatch', VERSION => "2.01" );
+my %p = ( NAME => 'makepatch', VERSION => "2.02" );
 
 # Extra info for newer versions.
 if ( $[ >= 5.005 ) {
@@ -55,7 +55,9 @@ you must install a better version of 'patch', for example, GNU patch.
 EOD
 }
 
-my $TMPDIR = $ENV{"TMPDIR"} || $ENV{TEMP} || "/usr/tmp";
+my $TMPDIR = $ENV{TMPDIR} || $ENV{TEMP};
+$TMPDIR = File::Spec->tmpdir if !$TMPDIR && File::Spec->can("tmpdir");
+$TMPDIR ||= "/usr/tmp";
 unless ( -d $TMPDIR && -w $TMPDIR ) {
 print STDERR <<EOD;
 The default location for temporary files ($TMPDIR) does not
