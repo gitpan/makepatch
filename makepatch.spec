@@ -1,6 +1,6 @@
 Summary: makepatch -- generate and apply patch kits
 Name: makepatch
-Version: 2.02
+Version: 2.03
 Release: 1
 License: GPL or Perl Artistic
 Distribution: Free
@@ -11,7 +11,7 @@ Requires: perl >= 5.004
 #Prereq: 
 Prefix: /usr/bin
 Packager: Johan Vromans <jvromans@squirrel.nl>
-Vendor: Squirrel Consultancy, Haarlem, The Netherlands
+Vendor: Squirrel Consultancy, Exloo, The Netherlands
 BuildArch: noarch
 BuildRoot: /var/tmp/makepatch-buildroot
 

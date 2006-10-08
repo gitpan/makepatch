@@ -31,10 +31,10 @@ Duivenvoordestraat 46
 2013 AG  Haarlem
 EOD
 
-open (D, ">t/d1/tdata1"); print D $data1; close D;
-open (D, ">t/d2/tdata1"); print D $data2; close D;
-open (D, ">t/d1/tdata2"); print D $data2; close D;
-open (D, ">t/d2/tdata2"); print D $data1; close D;
+open (D, ">t/d1/tdata1"); binmode(D); print D $data1; close D;
+open (D, ">t/d2/tdata1"); binmode(D); print D $data2; close D;
+open (D, ">t/d1/tdata2"); binmode(D); print D $data2; close D;
+open (D, ">t/d2/tdata2"); binmode(D); print D $data1; close D;
 
 my $tmpout = "basic.out";
 
