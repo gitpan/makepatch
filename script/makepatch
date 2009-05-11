@@ -3,11 +3,11 @@
 # Author          : Johan Vromans
 # Created On      : Tue Jul  7 20:39:39 1992
 # Last Modified By: Johan Vromans
-# Last Modified On: Sun Oct  8 15:06:50 2006
-# Update Count    : 1187
+# Last Modified On: Thu May  7 08:20:52 2009
+# Update Count    : 1194
 # Status          : Released
 #
-my $RCS_Id = '$Id: makepatch.pl,v 1.135 2006/10/08 13:06:55 jv Exp $ ';
+my $RCS_Id = '$Id: makepatch.pl,v 1.136 2009/05/07 06:25:56 jv Exp $ ';
 
 use strict;
 use Getopt::Long 2.00;
@@ -20,7 +20,7 @@ use File::Path;
 
 my $my_package = 'Sciurix';
 my $my_name    = "makepatch";
-my $my_version = "2.03";
+my $my_version = "2.04";
 my $data_version = '1.0';
 
 $my_version .= '*' if length('$Locker:  $ ') > 12;
@@ -62,16 +62,34 @@ my $opt_test = 0;		# testing
 
 my $exclude_pat;		# regex to exclude
 my @workq = ();			# pre/post work
-my $TMPDIR = $ENV{TMPDIR} || $ENV{TEMP};
-$TMPDIR = File::Spec->tmpdir if !$TMPDIR && File::Spec->can("tmpdir");
-$TMPDIR ||= "/usr/tmp";
+
+# Try to find a temp location.
+my $TMPDIR = (File::Spec->can('tmpdir') && File::Spec->tmpdir)
+  || $ENV{TMPDIR}
+  || $ENV{TEMP}
+  || '/usr/tmp';
+
 my $dot_u = File::Spec::Unix->curdir; # UNIX current dir
 my $dot = File::Spec->curdir;	# current dir
 my $dotdot = File::Spec->updir;	# parent dir
-my $HOME = $ENV{HOME} || ($ENV{HOMEDRIVE} && $ENV{HOMEPATH} && $ENV{HOMEDRIVE}.$ENV{HOMEPATH}) || $dot;
-my $nul = ($^O =~ /^MSWin/i) ? "nul" : "/dev/null";		# NLA0:
+
+# Try to find something home-ish.
+my $HOME = $ENV{HOME}
+  || ( ($^O eq 'MSWin32')
+       && ( $ENV{APPDATA}
+            || $ENV{USERPROFILE}
+            || $ENV{HOMEDRIVE} && $ENV{HOMEPATH}
+	       && $ENV{HOMEDRIVE}.$ENV{HOMEPATH}
+	  )
+     )
+  || $dot;
+
+# Try to find something null-ish.
+my $DEVNULL = (File::Spec->can('devnull') && File::Spec->devnull)
+  || '/dev/null';
+my $nulpat = quotemeta($DEVNULL);	# pattern to match nul device
+
 my $timestamp = "".localtime();	# timestamp, in string format
-my $nulpat = quotemeta ($nul);	# pattern to match nul
 my $unified = 0;		# produce unified diff
 my $skipped = 0;		# number of files skipped.
 my $excluded = 0;		# number of files excluded.
@@ -92,8 +110,6 @@ sub dodiff ($$$$);
 sub makepatch ();
 sub extract ($$);
 sub filelist ($);
-sub generate_perl ($);
-sub generate_shell ($);
 sub make_filelist ($;$);
 sub make_filelist_from_manifest ($);
 sub message (@);
@@ -123,7 +139,7 @@ if ( $opt_exclude_rcs ) {
 
 if ( $opt_exclude_cvs ) {
     # Load common .cvsignore, if present.
-    for ( $HOME ."/.cvsignore" ) {
+    for ( catfile($HOME, ".cvsignore") ) {
 	unshift (@opt_exclude, cvs_ignore($_)) if -s $_;
     }
 
@@ -759,6 +775,7 @@ sub dodiff ($$$$) {
 
     # Copy rest.
     print $patch ($_) while <$fh>;
+    print "\n";			# just in case
     $fh->close;
 
     return 1;
@@ -797,7 +814,7 @@ sub newfile ($$) {
       return 1;
     }
 
-    my $cmd = $opt_diff . " " . $nul . " " . quotfn($newfn);
+    my $cmd = $opt_diff . " " . $DEVNULL . " " . quotfn($newfn);
     trace ("+ $cmd (inlined)\n");
     print $patch ($cmd, "\n");
 
@@ -1370,7 +1387,6 @@ Makepatch options:
    -ignore-rcs-keywords ignore diffs in RCS keyword data (same as CVS)
    -extract PAT=RULE	define an archive extraction rule
    -[no]recurse         recurse through directories (default)
-   -generate XXX	style of output, either "perl" (default) or "shell"
    -verbose		verbose progress information
    -quiet		no progress information
    -help		this message

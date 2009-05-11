@@ -137,6 +137,12 @@ sub differ {
     while ( 1 ) {
 	$len1 = sysread (F1, $buf1, 10240);
 	$len2 = sysread (F2, $buf2, 10240);
+
+	$buf1 =~ s/(\r\n|\r|\n)/\n/g;
+	$buf2 =~ s/(\r\n|\r|\n)/\n/g;
+	$len1 = length $buf1;
+	$len2 = length $buf2;
+
 	return 0 if $len1 == $len2 && $len1 == 0;
 	return 1 if $len1 != $len2 || ( $len1 && $buf1 ne $buf2 );
     }

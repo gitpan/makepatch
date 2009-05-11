@@ -14,6 +14,12 @@ INSTALLATION
 
 REQUIREMENTS
 
-  - Perl 5.005 standard installation.
+  - Perl 5.004_05 or later standard installation.
   - For 'makepatch': the 'diff' program.
   - For 'applypatch': the 'patch' program.
+
+For best results, use the GNU version of the diff and patch programs.
+
+For Perl older than 5.005, you may need to install the File::Spec
+module.
+
