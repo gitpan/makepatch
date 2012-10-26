@@ -1,5 +1,9 @@
 #! perl
 
+################ WARNING : OLD CODE ################
+
+use strict;
+
 require 5.004;
 
 if ( $^O eq "solaris" ) {
@@ -18,23 +22,36 @@ you must install a better version of 'patch', for example, GNU patch.
 EOD
 }
 
-print "1..6\n";
+my $test = 1;
+
+print "1..8\n";
 
 my $data1 = <<EOD;
 Squirrel Consultancy
-Duvenvoordestraat 46
-2013 AG  Haarlem
+Cederlaan 6
+7875 EB  Exloo
 EOD
 my $data2 = <<EOD;
 Squirrel Consultancy
-Duivenvoordestraat 46
-2013 AG  Haarlem
+Cypreslaan 6
+7875 EB  Exloo
 EOD
 
-open (D, ">t/d1/tdata1"); binmode(D); print D $data1; close D;
-open (D, ">t/d2/tdata1"); binmode(D); print D $data2; close D;
-open (D, ">t/d1/tdata2"); binmode(D); print D $data2; close D;
-open (D, ">t/d2/tdata2"); binmode(D); print D $data1; close D;
+chdir("t") if -d "t";
+mkdir("d1") unless -f "d1";
+mkdir("d2") unless -f "d2";
+chdir("..");
+print "not " unless -d "t/d1";
+print "ok $test\n";
+$test++;
+print "not " unless -d "t/d2";
+print "ok $test\n";
+$test++;
+
+open (D, ">", "t/d1/tdata1"); binmode(D); print D $data1; close D;
+open (D, ">", "t/d2/tdata1"); binmode(D); print D $data2; close D;
+open (D, ">", "t/d1/tdata2"); binmode(D); print D $data2; close D;
+open (D, ">", "t/d2/tdata2"); binmode(D); print D $data1; close D;
 
 my $tmpout = "basic.out";
 
@@ -52,12 +69,13 @@ eval {
 
 # Should exit Okay.
 if ( !$@ || $@ =~ /^Okay/ ) {
-   print "ok 1\n";
+   print "ok $test\n";
 }
 else {
-   print "not ok 1\n";
+   print "not ok $test\n";
    print $@;
 }
+$test++;
 
 # Run makepatch's END block
 eval {
@@ -69,7 +87,8 @@ undef &MakePatch::cleanup;
 
 # Expect some output.
 print "not " unless -s $tmpout > 1300;
-print "ok 2\n";
+print "ok $test\n";
+$test++;
 
 my $tmpou2 = "basic.ou2";
 
@@ -88,12 +107,13 @@ chdir ("../..");
 
 # Should exit Okay.
 if ( $@ =~ /^Okay/ ) {
-   print "ok 3\n";
+   print "ok $test\n";
 }
 else {
-   print "not ok 3\n";
+   print "not ok $test\n";
    print $@;
 }
+$test++;
 
 # Expect no output.
 # print "not " if -s $tmpou2 > 0;
@@ -109,16 +129,19 @@ else {
 	print ("# tmpou2[$tmpou2]s[$s]c[$c]\nnot ");
     }
 }
-print "ok 4\n";
+print "ok $test\n";
+$test++;
 
 # Remove temp files.
 unlink $tmpout, $tmpou2;
 
 # Verify resultant data.
 print "not " if differ ("t/d1/tdata1", "t/d2/tdata1");
-print "ok 5\n";
+print "ok $test\n";
+$test++;
 print "not " if differ ("t/d1/tdata1", "t/d2/tdata1");
-print "ok 6\n";
+print "ok $test\n";
+$test++;
 
 sub differ {
     # Perl version of the 'cmp' program.

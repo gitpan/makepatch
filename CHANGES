@@ -1,3 +1,11 @@
+Changes in 2.05
+---------------
+
+Applypatch
+
+  * Prevent patch from failing if there's no patch, just file removal.
+    Thanks to Thanks to Diab Jerius for finding and fixing this.
+
 Changes in 2.04
 ---------------
 

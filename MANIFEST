@@ -7,6 +7,5 @@ script/applypatch
 CHANGES
 makepatch.spec
 t/basic.t
-t/d1/tdata1
-t/d2/tdata1
-
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)
